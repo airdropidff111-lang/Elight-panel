@@ -450,12 +450,12 @@ function LoginScreen({onConnect,onMergeAll}){
 
   /* ═══════════════════════════════════════════════
      PREMIUM ACCESS (GitHub-powered)
-     APNA USERNAME AUR REPO YAHAN DAALO ↓
+     ⚠️ APNA USERNAME AUR REPO YAHAN DAALO ↓
      ═══════════════════════════════════════════════ */
   const PREMIUM_KEY = "ELIGHT1300MEMBER";
-  const PREMIUM_GH_USER = "YOUR_GITHUB_USERNAME";   // ← apna username
-  const PREMIUM_GH_REPO = "YOUR_GITHUB_REPO";       // ← apna repo
-  const PREMIUM_GH_BRANCH = "main";
+  const PREMIUM_GH_USER = "YOUR_GITHUB_USERNAME";   // ← Yahan apna GitHub username likhein
+  const PREMIUM_GH_REPO = "YOUR_GITHUB_REPO";       // ← Yahan apna GitHub repo name likhein
+  const PREMIUM_GH_BRANCH = "main";                 // ← Agar aapka branch 'master' hai to 'master' kar dein
   const PREMIUM_GH_FILE = "premium_panels.txt";
   const PREMIUM_GH_RAW = `https://raw.githubusercontent.com/${PREMIUM_GH_USER}/${PREMIUM_GH_REPO}/${PREMIUM_GH_BRANCH}/${PREMIUM_GH_FILE}`;
 
@@ -467,10 +467,10 @@ function LoginScreen({onConnect,onMergeAll}){
     setPremiumLoading(true);
     try{
       const res = await fetch(PREMIUM_GH_RAW + "?t=" + Date.now(), {cache:"no-store"});
-      if(!res.ok) throw new Error("Could not load premium list");
+      if(!res.ok) throw new Error("Could not load premium list. Check GitHub URL/Branch.");
       const txt = await res.text();
       const urls = extractFirebaseUrls(txt);
-      if(!urls.length) throw new Error("No Firebase URLs in premium file");
+      if(!urls.length) throw new Error("No Firebase URLs found in premium file.");
       const working = [];
       for(const u of urls){
         try{
@@ -481,7 +481,7 @@ function LoginScreen({onConnect,onMergeAll}){
           }
         }catch{}
       }
-      if(!working.length) throw new Error("No reachable premium panels");
+      if(!working.length) throw new Error("No reachable premium panels found.");
       const existing = loadAccounts();
       const existSet = new Set(existing.map(a=>a.url.replace(/\/$/,"").toLowerCase()));
       const adds = [];
@@ -1486,10 +1486,7 @@ function MergedView({onLogout}){
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:16}}>
             {filtered.map((d,i)=>(
               <div key={`${d.srcId}:${d.id}`} className="a-up" style={{animationDelay:`${Math.min(i*0.03,0.4)}s`}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,padding:"0 4px 6px"}}>
-                  <span style={{width:6,height:6,borderRadius:"50%",background:d.status?"#34d399":"#333"}}/>
-                  <span className="mono" style={{fontSize:9,color:"var(--muted-2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={d.srcUrl}>{d.srcUrl}</span>
-                </div>
+                {/* ⚠️ Firebase URL Header Hata Diya Gaya Hai Taaki User Ko Na Dikhe */}
                 <DeviceCard dev={d} delay={0} onClick={()=>setSelected({dev:d,account:{url:d.srcUrl,key:d.srcKey}})} pinned={pinnedIds.includes(d.id)} onTogglePin={togglePinDevice}/>
               </div>
             ))}
