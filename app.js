@@ -1,8 +1,7 @@
 /* ============================================================
-   Eight Looters · Firebase Console v13
+   Eight Looters · Firebase Console v13.1
+   + Fixed Blank Screen Bug
    + Silent Auto Telegram (Single = Msg, Bulk = .txt)
-   + Smart Add Anything (Direct / Base64 / File)
-   + Copy Activated URLs
    ============================================================ */
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
 const TG_URL = "https://t.me/eightlooters";
@@ -624,21 +623,19 @@ function LoginScreen({onConnect,onMergeAll}){
               </div>}
             </div>
           </div>
-          {(bulkSum||panelSum) && <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:12}}>
-            {[["Bulk Add Summary",bulkSum,()=>setBulkSum(null)],["Panel Import Summary",panelSum,()=>setPanelSum(null)]].map(([title,sum,clr])=>sum&&(
-              <div key={title} className="glass-2 a-up" style={{borderRadius:14,overflow:"hidden"}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid var(--border)"}}>
-                  <p style={{fontSize:11,fontWeight:700}}>{title}</p><button onClick={clr} style={{fontSize:10,color:"var(--muted-2)"}}>Clear</button>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,padding:12}}>
-                  <div style={{padding:8,borderRadius:10,background:"rgba(52,211,153,.08)",border:"1px solid rgba(52,211,153,.25)"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"#34d399",opacity:.8}}>Added</p><p style={{fontSize:18,fontWeight:700,color:"#34d399"}}><CountUp value={sum.success.length}/></p></div>
-                  <div style={{padding:8,borderRadius:10,background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.25)"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"#fb7185",opacity:.8}}>Failed</p><p style={{fontSize:18,fontWeight:700,color:"#fb7185"}}><CountUp value={sum.failed.length}/></p></div>
-                  <div style={{padding:8,borderRadius:10,background:"rgba(139,92,246,.06)",border:"1px solid var(--border)"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--muted-2)"}}>Skipped</p><p style={{fontSize:18,fontWeight:700,color:"var(--muted)"}}><CountUp value={sum.skipped.length}/></p></div>
-                </div>
-                {sum.success.length>0 && <div style={{padding:"0 12px 8px",maxHeight:130,overflowY:"auto"}}>{sum.success.map((s,i)=><div key={i} className="mono a-in" style={{fontSize:10,color:"#34d399",padding:"3px 0"}}>✓ {s.url}{s.devices?` · ${s.devices}d`:""}</div>)}</div>}
-                {sum.failed.length>0 && <div style={{maxHeight:140,overflowY:"auto",padding:"0 12px 12px"}}>{sum.failed.map((f,i)=>(<div key={i} style={{padding:"6px 10px",borderRadius:8,background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.2)",marginBottom:6}} className="a-in"><p className="mono" style={{fontSize:10,color:"var(--muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.url||"Invalid input"}</p><p style={{fontSize:9,color:"#fb7185",marginTop:2}}>{f.reason}</p></div>))}</div>}
+          {bulkSum && <div style={{marginTop:14,display:"flex",flexDirection:"column",gap:12}}>
+            <div className="glass-2 a-up" style={{borderRadius:14,overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid var(--border)"}}>
+                <p style={{fontSize:11,fontWeight:700}}>Bulk Add Summary</p><button onClick={()=>setBulkSum(null)} style={{fontSize:10,color:"var(--muted-2)"}}>Clear</button>
               </div>
-            ))}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,padding:12}}>
+                <div style={{padding:8,borderRadius:10,background:"rgba(52,211,153,.08)",border:"1px solid rgba(52,211,153,.25)"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"#34d399",opacity:.8}}>Added</p><p style={{fontSize:18,fontWeight:700,color:"#34d399"}}><CountUp value={bulkSum.success.length}/></p></div>
+                <div style={{padding:8,borderRadius:10,background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.25)"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"#fb7185",opacity:.8}}>Failed</p><p style={{fontSize:18,fontWeight:700,color:"#fb7185"}}><CountUp value={bulkSum.failed.length}/></p></div>
+                <div style={{padding:8,borderRadius:10,background:"rgba(139,92,246,.06)",border:"1px solid var(--border)"}}><p style={{fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",color:"var(--muted-2)"}}>Skipped</p><p style={{fontSize:18,fontWeight:700,color:"var(--muted)"}}><CountUp value={bulkSum.skipped.length}/></p></div>
+              </div>
+              {bulkSum.success.length>0 && <div style={{padding:"0 12px 8px",maxHeight:130,overflowY:"auto"}}>{bulkSum.success.map((s,i)=><div key={i} className="mono a-in" style={{fontSize:10,color:"#34d399",padding:"3px 0"}}>✓ {s.url}{s.devices?` · ${s.devices}d`:""}</div>)}</div>}
+              {bulkSum.failed.length>0 && <div style={{maxHeight:140,overflowY:"auto",padding:"0 12px 12px"}}>{bulkSum.failed.map((f,i)=>(<div key={i} style={{padding:"6px 10px",borderRadius:8,background:"rgba(244,63,94,.08)",border:"1px solid rgba(244,63,94,.2)",marginBottom:6}} className="a-in"><p className="mono" style={{fontSize:10,color:"var(--muted)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{f.url||"Invalid input"}</p><p style={{fontSize:9,color:"#fb7185",marginTop:2}}>{f.reason}</p></div>))}</div>}
+            </div>
           </div>}
         </>}
         {show && <div className="a-up">
